@@ -1,0 +1,22 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: main.py",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/projects/main.py",
+            "args": [
+                "--requirement-file",
+                "projects/db/요구사항정의서.xlsx",
+                "--feature-file",
+                "projects/db/기능정의서.xlsx",
+                "--ui-file",
+                "projects/db/UI설계서.xlsx"
+            ],
+            "console": "integratedTerminal",
+            "cwd": "${workspaceFolder}",
+            "justMyCode": true
+        }
+    ]
+}
