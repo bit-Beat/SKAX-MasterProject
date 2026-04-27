@@ -10,13 +10,15 @@ from ui.service_data import DEFAULT_RESULT_VIEW_KEY, get_scenario_order
 DEFAULT_SESSION_STATE = {
     "result_view_key": DEFAULT_RESULT_VIEW_KEY,  # 결과 상세 보기 기준
     "focus_mode": "전체 보기",  # 결과를 어떤 기준으로 볼지 정하는 옵션
-    "demo_mode": True,  # 샘플 결과 사용 여부
+    #"demo_mode": True,  # 샘플 결과 사용 여부
     "extra_request": "핵심 이슈를 우선순위 기준으로 보여줘.",  # 사용자 추가 요청 문구
     "has_run": False,  # 점검 실행 여부
+    
     "prepared_payload": {},  # 업로드 문서를 정리한 JSON payload
     "prepared_payload_path": "",  # JSON payload 저장 경로
     "orchestrator_response": {},  # Orchestrator 응답 JSON
     "orchestrator_response_path": "",  # Orchestrator 응답 저장 경로
+    
     "last_run": {  # 최근 실행 정보 묶음
         "files": [],  # 최근 업로드 파일 이름 목록
         "request": "샘플 결과 미리보기",  # 최근 요청 문구

@@ -1,7 +1,6 @@
 """중앙 메인 화면을 구성하는 파일."""
 
 import time
-
 import streamlit as st
 
 from main import run_backend_pipeline
@@ -15,17 +14,14 @@ from ui.service_data import (
     get_scenario_order,
 )
 
-
 def render_main_view() -> None:
     """메인 화면 전체를 순서대로 렌더링합니다."""
-    scenario_order = get_scenario_order()  # 통합 실행 시나리오 순서
-    results = get_all_sample_results()  # 전체 시나리오 결과
+    scenario_order = get_scenario_order()  # 통합 실행 시나리오 순서 [basic_quality, traceability, ui_match, coverage]
+    results = get_all_sample_results()  # 샘플 시나리오 결과
 
     render_header(results, scenario_order)
-    #render_dashboard_snapshot(results, scenario_order)
     render_execute_section(scenario_order)
     render_result_section(results, scenario_order)
-    render_guide_section(scenario_order)
 
 
 def render_header(results: dict, scenario_order: list[str]) -> None:
@@ -36,9 +32,7 @@ def render_header(results: dict, scenario_order: list[str]) -> None:
     score_delta = overall_score - 75  # 임시 기준점 대비 변화량
 
     st.title("📃 프로젝트 산출물 통합 점검 서비스")
-    st.caption(
-        "사용자는 산출물을 한 번 업로드하고, 점검 Agent가 각 시나리오를 순차적으로 실행해 품질 이슈와 보완 포인트를 정리합니다."
-    )
+    st.caption("사용자는 산출물을 한 번 업로드하고, 점검 Agent가 각 시나리오를 순차적으로 실행해 품질 이슈와 보완 포인트를 정리합니다.")
 
     col1, col2, col3 = st.columns(3)
 
@@ -46,7 +40,7 @@ def render_header(results: dict, scenario_order: list[str]) -> None:
         col1.metric(
             "전체 시나리오",
             f"{len(scenario_order)}개",
-            "순차 실행",
+            "순차실행",
             border=True,
         )
     with col2:
@@ -63,64 +57,6 @@ def render_header(results: dict, scenario_order: list[str]) -> None:
             f"필수 {required_count}종",
             border=True,
         )
-
-
-def render_dashboard_snapshot(results: dict, scenario_order: list[str]) -> None:
-    """최신 현황을 차트와 표로 요약한 대시보드를 보여줍니다."""
-    st.subheader("최신 현황 대시보드")
-
-    top_left, top_right = st.columns(2)
-    with top_left:
-        st.caption("시나리오별 점수")
-        st.bar_chart(build_score_chart_data(results, scenario_order), use_container_width=True)
-
-    with top_right:
-        st.caption("이슈 분포")
-        st.bar_chart(build_issue_chart_data(results, scenario_order), use_container_width=True)
-
-    bottom_left, bottom_right = st.columns([0.95, 1.05])
-    with bottom_left:
-        render_readiness_panel(scenario_order)
-        render_quality_progress_panel(results, scenario_order)
-
-    with bottom_right:
-        st.caption("시나리오별 요약 현황")
-        st.dataframe(
-            build_dashboard_rows(results, scenario_order),
-            use_container_width=True,
-        )
-
-    st.divider()
-
-
-def render_readiness_panel(scenario_order: list[str]) -> None:
-    """문서 준비 현황과 통합 실행 범위를 보여줍니다."""
-    uploaded_count = len(st.session_state.last_run["files"])  # 최근 업로드 문서 수
-    required_count = len(get_all_required_files())  # 전체 필수 문서 수
-    progress = uploaded_count / required_count if required_count else 0  # 업로드 준비 비율
-
-    st.caption("문서 준비 현황")
-    st.progress(
-        progress,
-        text=f"업로드 {uploaded_count}/{required_count}건",
-    )
-    st.caption(
-        f"한 번의 점검 실행으로 총 {len(scenario_order)}개 시나리오가 순차적으로 수행됩니다."
-    )
-
-
-def render_quality_progress_panel(results: dict, scenario_order: list[str]) -> None:
-    """시나리오별 품질 점수를 진행률 형태로 보여줍니다."""
-    st.divider()
-    st.caption("시나리오별 품질 진척도")
-    for step, scenario_key in enumerate(scenario_order, start=1):
-        scenario = get_scenario_config(scenario_key)  # 현재 시나리오 정보
-        result = results[scenario_key]  # 현재 시나리오 결과
-        st.progress(
-            result["score"] / 100,
-            text=f"{step}. {scenario['label']} | {result['score']}점 | {result['status']}",
-        )
-
 
 def render_execute_section(scenario_order: list[str]) -> None:
     """파일 업로드와 통합 점검 실행 영역을 그립니다."""
@@ -163,7 +99,7 @@ def render_execute_section(scenario_order: list[str]) -> None:
                     "file": ui_file,
                 },
             }  # 업로드 문서 정보 맵
-            run_integrated_check(uploaded_documents, scenario_order)
+            run_integrated_check(uploaded_documents, scenario_order) ## 통합 점검 실행
 
     with right:
         # 우측은 통합 실행 흐름과 필요한 입력 정보를 안내합니다.
@@ -181,35 +117,32 @@ def render_execute_section(scenario_order: list[str]) -> None:
             st.caption(scenario["description"])
 
 
-def run_integrated_check(
-    uploaded_documents: dict[str, dict],
-    scenario_order: list[str],
-) -> None:
+def run_integrated_check(uploaded_documents: dict[str, dict], scenario_order: list[str],) -> None:
     """업로드 파일을 JSON으로 정리한 뒤 통합 점검 상태를 갱신합니다."""
     uploaded_file_names = [
-        document["file"].name
-        for document in uploaded_documents.values()
-        if document["file"] is not None
+        document["file"].name for document in uploaded_documents.values() if document["file"] is not None
     ]  # 실제 업로드 파일 이름 목록
 
-    if not uploaded_file_names:
-        st.warning("최소 한 개 이상의 문서를 업로드해야 합니다.")
+    st.write(f"uploaded_documents : {uploaded_documents}" )
+    st.write(f"scenario_order : {scenario_order}" )
+
+    ## 업로드 문서 누락 체크
+    if len(uploaded_file_names) < 3 :
+        st.warning("필수 문서를 모두 업로드해야 합니다.")
         return
 
-    total_steps = len(scenario_order) + 2  # JSON 생성 + Orchestrator 준비 + 시나리오 수
+    total_steps = len(scenario_order) + 2  # JSON 생성 + Orchestrator 준비 + 시나리오 수(4)
     status_text = st.empty()  # 단계 상태 메시지 영역
     progress_bar = st.progress(0, text="통합 점검 준비 중입니다.")  # 실행 진행률 표시
 
     status_text.info(f"1/{total_steps} 단계 실행 중: 업로드 문서 JSON 생성")
-    
+
+    # 백엔드 파이프라인 실행
     backend_result = run_backend_pipeline(
-        uploaded_documents=uploaded_documents,
-        user_request=st.session_state.extra_request.strip(),
-        scenario_order=scenario_order,
-    )  # 백엔드 파이프라인 실행
-    st.caption(uploaded_documents)
-    st.caption(st.session_state.extra_request.strip())
-    st.caption(scenario_order)
+        uploaded_documents=uploaded_documents, # 업로드한 파일 dict
+        user_request=st.session_state.extra_request.strip(), # 추가 요청 사항
+        scenario_order=scenario_order, # 시나리오 순서
+    )  
 
     progress_bar.progress(
         1 / total_steps,
@@ -252,6 +185,7 @@ def run_integrated_check(
 
 def render_result_section(results: dict, scenario_order: list[str]) -> None:
     """통합 결과와 시나리오별 상세 결과를 출력합니다."""
+    st.divider()
     st.subheader("통합 점검 결과")
 
     render_overall_status(results)
@@ -413,74 +347,6 @@ def render_backend_payload_tab() -> None:
         st.write("Orchestrator 응답")
         st.json(st.session_state.orchestrator_response, expanded=False)
         st.caption(f"응답 경로: {st.session_state.orchestrator_response_path}")
-
-
-def render_guide_section(scenario_order: list[str]) -> None:
-    """통합 점검이 어떤 항목을 순서대로 보는지 안내합니다."""
-    st.divider()
-    st.subheader("점검 안내")
-
-    left, right = st.columns(2)
-    with left:
-        st.write("순차 실행 시나리오")
-        for step, scenario_key in enumerate(scenario_order, start=1):
-            scenario = get_scenario_config(scenario_key)  # 현재 안내 시나리오 정보
-            st.write(f"{step}. {scenario['label']}")
-            st.caption(", ".join(scenario["checks"]))
-
-    with right:
-        st.write("사용자에게 제공되는 결과")
-        for item in INTEGRATED_SERVICE["outputs"]:
-            st.write(f"- {item}")
-
-
-def build_score_chart_data(results: dict, scenario_order: list[str]) -> dict:
-    """시나리오별 점수 차트 데이터를 생성합니다."""
-    return {
-        "점수": {
-            get_scenario_config(scenario_key)["label"]: results[scenario_key]["score"]
-            for scenario_key in scenario_order
-        }
-    }
-
-
-def build_issue_chart_data(results: dict, scenario_order: list[str]) -> dict:
-    """시나리오별 이슈 수 차트 데이터를 생성합니다."""
-    return {
-        "치명 이슈": {
-            get_scenario_config(scenario_key)["label"]: len(results[scenario_key]["critical"])
-            for scenario_key in scenario_order
-        },
-        "경고": {
-            get_scenario_config(scenario_key)["label"]: len(results[scenario_key]["warnings"])
-            for scenario_key in scenario_order
-        },
-        "개선 제안": {
-            get_scenario_config(scenario_key)["label"]: len(results[scenario_key]["suggestions"])
-            for scenario_key in scenario_order
-        },
-    }
-
-
-def build_dashboard_rows(results: dict, scenario_order: list[str]) -> list[dict]:
-    """시나리오별 요약 표 데이터를 생성합니다."""
-    rows: list[dict] = []
-    for step, scenario_key in enumerate(scenario_order, start=1):
-        scenario = get_scenario_config(scenario_key)  # 현재 행 시나리오 정보
-        result = results[scenario_key]  # 현재 행 시나리오 결과
-        rows.append(
-            {
-                "단계": step,
-                "시나리오": scenario["label"],
-                "상태": result["status"],
-                "점수": result["score"],
-                "치명 이슈": len(result["critical"]),
-                "경고": len(result["warnings"]),
-                "개선 제안": len(result["suggestions"]),
-            }
-        )
-    return rows
-
 
 def calculate_overall_score(results: dict) -> int:
     """전체 시나리오 점수 평균을 정수로 계산합니다."""

@@ -15,47 +15,31 @@ from zipfile import ZipFile
 
 from agents.orchestrator import run_orchestrator
 from ui.service_data import get_scenario_order
-
+from utils.common_method import log
 
 PROJECT_ROOT = Path(__file__).resolve().parent  # projects 루트 경로
 INTAKE_DIR = PROJECT_ROOT / "data" / "intake"  # 업로드 문서와 JSON 저장 경로
-DEFAULT_DEBUG_FILES = {
-    "requirement_file": [
-        PROJECT_ROOT / "db" / "요구사항정의서.xls",
-        PROJECT_ROOT / "db" / "요구사항정의서.xlsx",
-    ],
-    "feature_file": [
-        PROJECT_ROOT / "db" / "기능정의서.xls",
-        PROJECT_ROOT / "db" / "기능정의서.xlsx",
-    ],
-    "ui_file": [
-        PROJECT_ROOT / "db" / "ui설계서.xls",
-        PROJECT_ROOT / "db" / "ui설계서.xlsx",
-        PROJECT_ROOT / "db" / "UI설계서.xls",
-        PROJECT_ROOT / "db" / "UI설계서.xlsx",
-    ],
-}  # 콘솔 디버깅 시 자동으로 찾을 테스트 문서 후보
 
-XML_NS = {
-    "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
-}  # xlsx xml 파싱용 네임스페이스
+XML_NS = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",}  # xlsx xml 파싱용 네임스페이스
 REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"  # workbook relationship 네임스페이스
 PKG_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships"  # package relationship 네임스페이스
 
-
+# 진입점 함수 
 def run_backend_pipeline(
-    uploaded_documents: dict[str, dict[str, Any]],
-    user_request: str,
-    scenario_order: list[str],
+    uploaded_documents: dict[str, dict[str, Any]], # 업로드한 산출물
+    user_request: str, # 사용자 추가 요청 사항
+    scenario_order: list[str], # 점검 시나리오 순서
 ) -> dict[str, Any]:
     """업로드 문서를 JSON payload로 만들고 Orchestrator에 전달합니다."""
-    run_id = build_run_id()  # 현재 실행 고유 ID
+    
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S") # 현재 실행 고유 ID
     run_dir = INTAKE_DIR / run_id  # 실행별 저장 폴더
-    run_dir.mkdir(parents=True, exist_ok=True)
-
+    run_dir.mkdir(parents=True, exist_ok=True) # 저장 폴더 생성
+ 
     document_payloads = []  # 업로드 문서별 JSON 정보
     for document_key, document_info in uploaded_documents.items():
         uploaded_file = document_info.get("file")
+        
         if uploaded_file is None:
             continue
         document_payloads.append(
@@ -68,11 +52,12 @@ def run_backend_pipeline(
         scenario_order=scenario_order,
         document_payloads=document_payloads,
     )
+    log(f"agent_request : {agent_request}", "info")
 
     request_path = run_dir / "agent_request.json"  # Orchestrator 전달 전 JSON 파일 경로
     agent_request["request_path"] = str(request_path)  # DeepAgents 프롬프트에서 참고할 intake payload 경로
-    write_json_file(request_path, agent_request)
-
+    write_json_file(request_path, agent_request) # reqeust_path로 json 파일 저장 intake/run_id/agent_request.json
+    
     orchestrator_response = run_orchestrator(agent_request)  # 현재는 Orchestrator 스텁 호출
     response_path = run_dir / "orchestrator_response.json"  # Orchestrator 응답 JSON 경로
     write_json_file(response_path, orchestrator_response)
@@ -84,12 +69,6 @@ def run_backend_pipeline(
         "orchestrator_response": orchestrator_response,
         "orchestrator_response_path": str(response_path),
     }
-
-
-def build_run_id() -> str:
-    """실행 시각 기준의 고유 실행 ID를 생성합니다."""
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
-
 
 def build_document_payload(
     document_key: str,
@@ -134,7 +113,9 @@ def sanitize_file_name(file_name: str) -> str:
     sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", file_name).strip("_")
     return sanitized or "uploaded_file"
 
-
+# =========================================================
+# 파일 요약
+# =========================================================
 def extract_file_summary(file_path: Path) -> dict[str, Any]:
     """파일 확장자에 따라 요약 정보를 추출합니다."""
     suffix = file_path.suffix.lower()
@@ -213,10 +194,10 @@ def load_workbook_relationships(workbook_zip: ZipFile) -> dict[str, str]:
     """workbook.xml.rels 에서 시트 경로 매핑을 읽어옵니다."""
     relationship_root = ET.fromstring(workbook_zip.read("xl/_rels/workbook.xml.rels"))
     relationship_map = {}
+    
     for relation in relationship_root.findall(f"{{{PKG_REL_NS}}}Relationship"):
-        relation_id = relation.attrib.get("Id", "")
-        target = relation.attrib.get("Target", "")
-        relationship_map[relation_id] = target
+        relationship_map[rel.attrib.get("Id")] = rel.attrib.get("Target")
+        
     return relationship_map
 
 
@@ -357,7 +338,9 @@ def write_json_file(file_path: Path, payload: dict[str, Any]) -> None:
         encoding="utf-8",
     )
 
-
+# =========================================================
+# File Find & Upload
+# =========================================================
 class LocalUploadedFile:
     """Adapter that lets local files behave like Streamlit uploads."""
 
@@ -369,126 +352,56 @@ class LocalUploadedFile:
     def getvalue(self) -> bytes:
         return self._file_path.read_bytes()
 
+def find_file(paths: list[Path]) -> Path:
+    for p in paths:
+        if p.exists():
+            return p
+    raise FileNotFoundError(f"파일을 찾을 수 없음: {paths}")
 
-def build_cli_parser() -> argparse.ArgumentParser:
-    """Create the CLI parser for standalone backend execution."""
-    parser = argparse.ArgumentParser(
-        description="Create intake JSON and run the orchestrator pipeline.",
-    )
-    parser.add_argument("--requirement-file", type=Path, help="Path to the requirement definition file.")
-    parser.add_argument("--feature-file", type=Path, help="Path to the feature definition file.")
-    parser.add_argument("--ui-file", type=Path, help="Path to the UI design file.")
-    parser.add_argument(
-        "--request",
-        default="",
-        help="Extra request text to include in the orchestrator payload.",
-    )
-    parser.add_argument(
-        "--scenario",
-        action="append",
-        dest="scenarios",
-        help="Scenario key to run. Repeat to control execution order.",
-    )
-    return parser
+# =========================================================
+# MAIN (핵심 변경)
+# =========================================================
 
+def main() -> int:
+    requirement_path = find_file([
+        PROJECT_ROOT / "db" / "요구사항정의서.xlsx",
+        PROJECT_ROOT / "db" / "요구사항정의서.xls",
+    ])
+    feature_path = find_file([
+        PROJECT_ROOT / "db" / "기능정의서.xlsx",
+        PROJECT_ROOT / "db" / "기능정의서.xls",
+    ])
+    ui_path = find_file([
+        PROJECT_ROOT / "db" / "ui설계서.xlsx",
+        PROJECT_ROOT / "db" / "ui설계서.xls",
+        PROJECT_ROOT / "db" / "UI설계서.xlsx",
+        PROJECT_ROOT / "db" / "UI설계서.xls",
+    ])
 
-def ensure_input_file(file_path: Path) -> Path:
-    """Validate a CLI input path and return its resolved file path."""
-    resolved_path = file_path.expanduser().resolve()
-    if not resolved_path.exists():
-        raise FileNotFoundError(f"Input file not found: {resolved_path}")
-    if not resolved_path.is_file():
-        raise ValueError(f"Input path is not a file: {resolved_path}")
-    return resolved_path
-
-
-def build_cli_uploaded_documents(args: argparse.Namespace) -> dict[str, dict[str, Any]]:
-    """Convert CLI file paths into the uploaded-document structure."""
-    file_specs = [
-        ("requirement_definition", "요구사항 정의서", args.requirement_file),
-        ("feature_definition", "기능 정의서", args.feature_file),
-        ("ui_design", "UI 설계서", args.ui_file),
-    ]
-
-    uploaded_documents: dict[str, dict[str, Any]] = {}
-    for document_key, label, file_path in file_specs:
-        uploaded_documents[document_key] = {
-            "label": label,
-            "file": None if file_path is None else LocalUploadedFile(ensure_input_file(file_path)),
-        }
-    return uploaded_documents
-
-
-def resolve_scenario_order(scenarios: list[str] | None) -> list[str]:
-    """Use CLI scenarios when provided, otherwise fall back to the default order."""
-    default_order = get_scenario_order()
-    if not scenarios:
-        return default_order
-
-    invalid_scenarios = [scenario for scenario in scenarios if scenario not in default_order]
-    if invalid_scenarios:
-        available = ", ".join(default_order)
-        invalid = ", ".join(invalid_scenarios)
-        raise ValueError(f"Unknown scenario key(s): {invalid}. Available: {available}")
-
-    return scenarios
-
-
-def print_cli_usage_hint(parser: argparse.ArgumentParser) -> None:
-    """Show a friendly help message when the script is launched without inputs."""
-    parser.print_help()
-    print(
-        "\n기본 테스트 문서를 찾지 못했습니다. 예시:\n"
-        "  py -3 projects/main.py --requirement-file path/to/requirements.xlsx",
-        file=sys.stderr,
-    )
-
-
-def apply_default_debug_inputs(args: argparse.Namespace) -> argparse.Namespace:
-    """명시 입력이 없으면 db 폴더의 기본 테스트 문서를 자동 연결합니다."""
-    if any([args.requirement_file, args.feature_file, args.ui_file]):
-        return args
-
-    resolved_defaults = {
-        "requirement_file": find_first_existing_path(DEFAULT_DEBUG_FILES["requirement_file"]),
-        "feature_file": find_first_existing_path(DEFAULT_DEBUG_FILES["feature_file"]),
-        "ui_file": find_first_existing_path(DEFAULT_DEBUG_FILES["ui_file"]),
+    uploaded_documents = {
+        "requirement_definition": {
+            "label": "요구사항 정의서",
+            "file": LocalUploadedFile(requirement_path),
+        },
+        "feature_definition": {
+            "label": "기능 정의서",
+            "file": LocalUploadedFile(feature_path),
+        },
+        "ui_design": {
+            "label": "UI 설계서",
+            "file": LocalUploadedFile(ui_path),
+        },
     }
-
-    args.requirement_file = resolved_defaults["requirement_file"]
-    args.feature_file = resolved_defaults["feature_file"]
-    args.ui_file = resolved_defaults["ui_file"]
-    return args
-
-
-def find_first_existing_path(candidate_paths: list[Path]) -> Path | None:
-    """후보 경로 중 실제로 존재하는 첫 번째 파일을 반환합니다."""
-    for candidate_path in candidate_paths:
-        if candidate_path.exists() and candidate_path.is_file():
-            return candidate_path
-    return None
-
-
-def main(argv: list[str] | None = None) -> int:
-    """Run the backend pipeline directly from the command line."""
-    parser = build_cli_parser()
-    args = parser.parse_args(argv)
-    args = apply_default_debug_inputs(args)
-    uploaded_documents = build_cli_uploaded_documents(args)
-
-    if not any(document["file"] is not None for document in uploaded_documents.values()):
-        print_cli_usage_hint(parser)
-        return 1
-
+        
     backend_result = run_backend_pipeline(
         uploaded_documents=uploaded_documents,
-        user_request=args.request.strip(),
-        scenario_order=resolve_scenario_order(args.scenarios),
+        user_request="핵심 이슈를 우선순위 기준으로 보여줘.",
+        scenario_order=get_scenario_order(),
     )
-    json.dump(backend_result, sys.stdout, ensure_ascii=False, indent=2)
-    sys.stdout.write("\n")
-    return 0
 
+    #print(json.dumps(backend_result, ensure_ascii=False, indent=2))
+
+    return 0
 
 if __name__ == "__main__":
     main()

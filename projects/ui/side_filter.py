@@ -19,9 +19,10 @@ def render_side_filter() -> None:
     current_index = result_view_options.index(current_view)  # selectbox 기본 선택 위치
 
     with st.sidebar:
-        st.title("산출물 점검 Agent")
-        st.caption("업로드 문서를 먼저 JSON으로 정리한 뒤, 모든 시나리오를 순차적으로 점검합니다.")
+        st.title(INTEGRATED_SERVICE["label"])
+        st.caption("프로젝트 산출물을 업로드하면 시나리오대 순차적으로 점검합니다.")
 
+        ## 사용여부판단
         st.selectbox(
             "결과 상세 보기",
             result_view_options,
@@ -35,13 +36,13 @@ def render_side_filter() -> None:
             ["전체 보기", "치명 이슈 우선", "개선 제안 우선"],
             key="focus_mode",
         )
+        ## 사용여부판단
 
-        st.toggle("샘플 결과 사용", key="demo_mode")  # 추후 실제 분석 모드와 분리하기 위한 토글
+        #st.toggle("샘플 결과 사용", key="demo_mode")  # 추후 실제 분석 모드와 분리하기 위한 토글
 
         st.divider()
 
         st.subheader("실행 방식")
-        st.write(INTEGRATED_SERVICE["label"])
         st.caption(INTEGRATED_SERVICE["description"])
 
         st.caption("실행 순서")
