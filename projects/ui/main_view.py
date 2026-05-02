@@ -122,10 +122,6 @@ def run_integrated_check(uploaded_documents: dict[str, dict], scenario_order: li
     uploaded_file_names = [
         document["file"].name for document in uploaded_documents.values() if document["file"] is not None
     ]  # 실제 업로드 파일 이름 목록
-
-    st.write(f"uploaded_documents : {uploaded_documents}" )
-    st.write(f"scenario_order : {scenario_order}" )
-
     ## 업로드 문서 누락 체크
     if len(uploaded_file_names) < 3 :
         st.warning("필수 문서를 모두 업로드해야 합니다.")

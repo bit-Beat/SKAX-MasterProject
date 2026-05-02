@@ -89,7 +89,7 @@ def build_document_payload(
         "mime_type": getattr(uploaded_file, "type", ""),  # 업로드 mime type
         "size_bytes": len(file_bytes),  # 파일 크기
         "sha256": hashlib.sha256(file_bytes).hexdigest(),  # 무결성 확인용 해시
-        "saved_path": str(saved_path),  # 로컬 저장 경로
+        "saved_path": str(saved_path),   # 로컬 저장 경로
         "content_summary": extract_file_summary(saved_path),  # 파일 내용 요약
     }
 

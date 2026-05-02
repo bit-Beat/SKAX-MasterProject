@@ -28,8 +28,11 @@ Do not skip ahead unless the task explicitly allows it.
 
 3. Delegate detailed work to subagents.
 Use role-based subagents instead of doing all detailed reasoning in the parent context.
-`validation-agent` handles `basic_quality` and `traceability`.
-`review-agent` handles `ui_match` and `coverage`.
+`basic-quality-agent` handles SC-001 / `basic_quality`.
+`traceability-agent` handles SC-002 / `traceability`.
+`ui-match-agent` handles SC-003 / `ui_match`.
+`coverage-agent` handles SC-004 / `coverage`.
+Use `qa-agent` only when document ambiguity should be turned into concrete confirmation questions.
 
 4. Keep the parent context compact.
 Ask subagents for focused results and synthesize only what is needed for the next step.

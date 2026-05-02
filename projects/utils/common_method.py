@@ -28,11 +28,11 @@ def pretty_trace(message):
     step = 1
 
     if not isinstance(message, dict):
-        WARNING_MESSAGE("Not Dict Type!")
+        log("Not Dict Type!")
         return 
 
     if "messages" not in message.keys():
-        WARNING_MESSAGE("DeepAgent 메시지 결과 값 전달 바랍니다.")
+        log("DeepAgent 메시지 결과 값 전달 바랍니다.", "warning")
         return
 
     messages = message['messages']

@@ -11,14 +11,14 @@ from deepagents import create_deep_agent
 from langchain_openai import AzureChatOpenAI
 
 from agents.agent_models import FinalReviewReport
-from agents.guide_agent import build_guide_agent_spec
-from agents.improvement_agent import build_improvement_agent_spec
+from agents.basic_quality_agent import build_basic_quality_agent_spec
+from agents.coverage_agent import build_coverage_agent_spec
 from agents.qa_agent import build_qa_agent_spec
 from agents.report_agent import build_report_agent_spec
-from agents.review_agent import build_review_agent_spec
-from agents.validation_agent import build_validation_agent_spec
+from agents.traceability_agent import build_traceability_agent_spec
+from agents.ui_match_agent import build_ui_match_agent_spec
 from tools.review_tools import build_toolset, get_document_catalog_data
-from utils.common_method import save_json
+from utils.common_method import save_json, log, pretty_trace
 from utils.config_loader import load_config
 
 
@@ -41,11 +41,11 @@ LLM = AzureChatOpenAI(
 # ---[ LLM 설정 ]---
 
 SUBAGENT_BUILDERS = [
-    build_guide_agent_spec,
+    build_basic_quality_agent_spec,
+    build_traceability_agent_spec,
+    build_ui_match_agent_spec,
+    build_coverage_agent_spec,
     build_qa_agent_spec,
-    build_validation_agent_spec,
-    build_review_agent_spec,
-    build_improvement_agent_spec,
     build_report_agent_spec,
 ]  # 역할별 SubAgent 구성을 개별 파일에서 읽어오는 빌더 목록
 
@@ -54,7 +54,7 @@ def create_orchestrator_agent(agent_request: Dict[str, Any]):
     """공식 DeepAgents 형태로 Orchestrator를 생성합니다."""
     toolset = build_toolset(agent_request)
     subagents = build_subagent_specs(toolset)
-
+    log(build_system_prompt(agent_request), "info")
     return create_deep_agent(
         model=LLM,
         tools=toolset["shared"],
@@ -62,7 +62,7 @@ def create_orchestrator_agent(agent_request: Dict[str, Any]):
         subagents=subagents,
         skills=toolset["skills"]["orchestrator_agent"],
         response_format=FinalReviewReport,
-        name="deliverable-review-orchestrator",
+        name="orchestrator",
     )
 
 
@@ -72,7 +72,9 @@ def run_orchestrator(agent_request: Dict[str, Any]) -> Dict[str, Any]:
     agent = create_orchestrator_agent(agent_request)
     task = build_task_prompt(agent_request)
 
-    raw_result = agent.invoke({"messages": [{"role": "user", "content": task}]})
+    raw_result = agent.invoke({"messages": [{"role": "user", "content": task}]}) ### DeepAgents 실행
+    pretty_trace(raw_result)
+    print(raw_result)
 
     final_report = normalize_report(
         run_id=run_id,
@@ -81,7 +83,7 @@ def run_orchestrator(agent_request: Dict[str, Any]) -> Dict[str, Any]:
         fallback_text=extract_last_message(raw_result),
     )
     save_json(DATA_ROOT / run_id / "final_report.json", final_report)
-
+ 
     result = {
         "status": "completed",
         "mode": "langchain_deepagents",
@@ -106,7 +108,7 @@ def build_system_prompt(agent_request: Dict[str, Any]) -> str:
     lines = []
     for document in get_document_catalog_data(agent_request.get("documents", [])):
         lines.append(
-            f"- {document['document_label']} / rows={document['row_count']} / parser={document['parser_status']}"
+            f"- {document['document_label']} / rows={document['row_count']} / saved_path={document['saved_path']}"
         )
     document_summary = "\n".join(lines) if lines else "- 업로드 문서 없음"
 
@@ -123,10 +125,15 @@ def build_system_prompt(agent_request: Dict[str, Any]) -> str:
 운영 규칙:
 1. 시작 시 문서 상태를 확인한다.
 2. 시나리오는 순차 실행한다.
-3. basic_quality, traceability는 validation-agent를 우선 활용한다.
-4. ui_match, coverage는 review-agent를 우선 활용한다.
-5. 필요한 경우 guide-agent, qa-agent, improvement-agent, report-agent를 호출한다.
-6. 최종 응답은 반드시 구조화된 보고서로 반환한다.
+3. 직접 세부 분석을 오래 수행하지 말고 반드시 시나리오별 SubAgent에 위임한다.
+4. SC-001/basic_quality는 basic-quality-agent에 위임한다.
+5. SC-002/traceability는 traceability-agent에 위임한다.
+6. SC-003/ui_match는 ui-match-agent에 위임한다.
+7. SC-004/coverage는 coverage-agent에 위임한다.
+8. 문서가 애매하거나 판단 근거가 부족하면 qa-agent로 확인 질문을 생성한다.
+9. 동일 Tool 반복 호출은 피하고, 불확실한 내용은 확정 판단으로 공유하지 않는다.
+10. 모든 시나리오 결과가 모이면 report-agent로 최종 보고서를 통합한다.
+11. 최종 응답은 반드시 구조화된 보고서로 반환한다.
 """
 
 

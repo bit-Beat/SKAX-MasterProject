@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional
 from langchain_core.tools import tool
 
 from ui.service_data import get_scenario_config
+from utils.common_method import save_json, log, pretty_trace
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -27,6 +28,7 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
     """현재 요청 기준으로 DeepAgents tool registry를 만듭니다."""
     run_id = agent_request.get("run_id", "manual_run")
     documents = agent_request.get("documents", [])
+    log(f"documents : {documents}")
 
     @tool("get_document_catalog")
     def get_document_catalog_tool() -> Dict[str, Any]:
@@ -99,15 +101,23 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "shared": shared,
         "guide": shared,
-        "validation": [
+        "basic_quality": [
             get_scenario_definition_tool,
             run_basic_quality_review_tool,
+            persist_subagent_output_tool,
+        ],
+        "traceability": [
+            get_scenario_definition_tool,
             run_traceability_review_tool,
             persist_subagent_output_tool,
         ],
-        "review": [
+        "ui_match": [
             get_scenario_definition_tool,
             run_ui_match_review_tool,
+            persist_subagent_output_tool,
+        ],
+        "coverage": [
+            get_scenario_definition_tool,
             run_coverage_review_tool,
             persist_subagent_output_tool,
         ],
@@ -120,8 +130,10 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
             "orchestrator_agent": [str(SKILLS_ROOT / "orchestrator_agent")],
             "guide_agent": [str(SKILLS_ROOT / "guide_agent")],
             "qa_agent": [str(SKILLS_ROOT / "qa_agent")],
-            "validation_agent": [str(SKILLS_ROOT / "validation_agent")],
-            "deep_review_agent": [str(SKILLS_ROOT / "deep_review_agent")],
+            "basic_quality_agent": [str(SKILLS_ROOT / "basic_quality_agent")],
+            "traceability_agent": [str(SKILLS_ROOT / "traceability_agent")],
+            "ui_match_agent": [str(SKILLS_ROOT / "ui_match_agent")],
+            "coverage_agent": [str(SKILLS_ROOT / "coverage_agent")],
             "improvement_agent": [str(SKILLS_ROOT / "improvement_agent")],
             "report_agent": [str(SKILLS_ROOT / "report_agent")],
         },
@@ -133,6 +145,7 @@ def get_document_catalog_data(documents: List[Dict[str, Any]]) -> List[Dict[str,
     return [
         {
             "document_key": document.get("document_key", ""),
+            "saved_path": document.get("saved_path", ""),
             "document_label": DOCUMENT_LABELS.get(document.get("document_key", ""), document.get("document_label", "")),
             "file_name": document.get("file_name", ""),
             "parser_status": document.get("content_summary", {}).get("parser_status", "unknown"),
