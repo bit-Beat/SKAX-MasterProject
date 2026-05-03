@@ -5,8 +5,6 @@ from __future__ import annotations
 from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
-from agents.agent_models import SubagentReport
-
 class SubagentReport(BaseModel):
     """ basic_quality Agent 반환 구조."""
 
@@ -28,6 +26,8 @@ def build_basic_quality_agent_spec(toolset: Dict[str, Any]) -> Dict[str, Any]:
             "사전에 정의된 룰과 체크리스트를 기준으로 형식, 오탈자, 필수값 누락을 검증하라. "
             "의미 기반 추론은 최소화하고, 기능/UI 의미 일치성 판단은 수행하지 마라. "
             "반드시 run_basic_quality_review 결과에 근거해 findings, warnings, score, recommendations를 정리하라."
+            "반드시 Skill에서 제공하는 run_basic_quality_review 함수를 호출해 점검을 수행하라. "
+            "점검이 종료되면 점검 결과를 Json 파일로 저장하라. 저장 시 persist_subagent_output 함수를 사용해 파일 경로를 기록하라."
         ),
         "tools": toolset["basic_quality"],
         "skills": toolset["skills"]["basic_quality_agent"],

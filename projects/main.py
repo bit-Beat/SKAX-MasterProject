@@ -46,13 +46,16 @@ def run_backend_pipeline(
             build_document_payload(document_key, document_info, run_dir)
         )
 
+    #log("파싱된 문서 JSON:", "info")
+    #log(json.dumps(document_payloads, ensure_ascii=False, indent=2))
+
     agent_request = build_agent_request_payload(
         run_id=run_id,
         user_request=user_request,
         scenario_order=scenario_order,
         document_payloads=document_payloads,
     )
-    log(f"agent_request : {agent_request}", "info")
+    #log(f"agent_request : {agent_request}", "info")
 
     request_path = run_dir / "agent_request.json"  # Orchestrator 전달 전 JSON 파일 경로
     agent_request["request_path"] = str(request_path)  # DeepAgents 프롬프트에서 참고할 intake payload 경로
@@ -80,6 +83,11 @@ def build_document_payload(
     file_bytes = uploaded_file.getvalue()  # 업로드 원본 바이트
     file_name = uploaded_file.name  # 원본 파일 이름
     saved_path = save_uploaded_file(run_dir, document_key, file_name, file_bytes)  # 로컬 저장 경로
+    content_summary = extract_file_summary(saved_path)  # 파일 내용 요약
+
+    # 파싱된 JSON을 별도 파일로 저장
+    parsed_json_path = run_dir / f"{document_key}_parsed.json"
+    write_json_file(parsed_json_path, content_summary)
 
     return {
         "document_key": document_key,  # 내부 문서 구분 키
@@ -90,7 +98,8 @@ def build_document_payload(
         "size_bytes": len(file_bytes),  # 파일 크기
         "sha256": hashlib.sha256(file_bytes).hexdigest(),  # 무결성 확인용 해시
         "saved_path": str(saved_path),   # 로컬 저장 경로
-        "content_summary": extract_file_summary(saved_path),  # 파일 내용 요약
+        "parsed_json_path": str(parsed_json_path),  # 파싱된 JSON 파일 경로
+        "content_summary": content_summary,  # 파일 내용 요약
     }
 
 
@@ -196,7 +205,7 @@ def load_workbook_relationships(workbook_zip: ZipFile) -> dict[str, str]:
     relationship_map = {}
     
     for relation in relationship_root.findall(f"{{{PKG_REL_NS}}}Relationship"):
-        relationship_map[rel.attrib.get("Id")] = rel.attrib.get("Target")
+        relationship_map[relation.attrib.get("Id")] = relation.attrib.get("Target")
         
     return relationship_map
 
@@ -380,15 +389,15 @@ def main() -> int:
 
     uploaded_documents = {
         "requirement_definition": {
-            "label": "요구사항 정의서",
+            "label": "요구사항정의서",
             "file": LocalUploadedFile(requirement_path),
         },
         "feature_definition": {
-            "label": "기능 정의서",
+            "label": "기능정의서",
             "file": LocalUploadedFile(feature_path),
         },
         "ui_design": {
-            "label": "UI 설계서",
+            "label": "UI설계서",
             "file": LocalUploadedFile(ui_path),
         },
     }
@@ -399,7 +408,7 @@ def main() -> int:
         scenario_order=get_scenario_order(),
     )
 
-    #print(json.dumps(backend_result, ensure_ascii=False, indent=2))
+    #log(json.dumps(backend_result, ensure_ascii=False, indent=2), 'info')
 
     return 0
 

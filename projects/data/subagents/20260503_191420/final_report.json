@@ -1,0 +1,93 @@
+{
+  "run_id": "20260503_191420",
+  "summary": "본 산출물 점검 결과, 전체 시나리오별 주요 이슈와 권장 조치가 도출되었습니다. 각 시나리오의 점수와 상태를 기반으로 보완이 필요한 시나리오를 우선순위별로 정리하였으며, 전체 점수와 핵심 액션을 포함한 최종 보고서를 제공합니다.",
+  "overall_score": 76,
+  "blocked_scenarios": [
+    "traceability",
+    "coverage"
+  ],
+  "scenario_order": [
+    "basic_quality",
+    "traceability",
+    "ui_match",
+    "coverage"
+  ],
+  "scenario_results": [
+    {
+      "scenario_key": "basic_quality",
+      "scenario_label": "기본 품질",
+      "status": "통과",
+      "score": 85,
+      "summary": "문서의 기본 품질(정확성, 완성도, 오탈자 등)은 양호하며, 주요 오류는 발견되지 않았음.",
+      "findings": [
+        "문서 내 오탈자 없음",
+        "형식 및 구조 일관성 유지"
+      ],
+      "warnings": [
+        "일부 항목의 설명이 간략함"
+      ],
+      "recommendations": [
+        "설명 보완 필요 항목에 추가 상세 내용 기입"
+      ]
+    },
+    {
+      "scenario_key": "traceability",
+      "scenario_label": "추적성",
+      "status": "보완 필요",
+      "score": 65,
+      "summary": "요구사항과 산출물 간의 추적성 매핑이 일부 누락되어, 전체 요구사항의 반영 여부 확인이 어려움.",
+      "findings": [
+        "요구사항 매핑표 일부 누락",
+        "산출물 내 요구사항 번호 미표기"
+      ],
+      "warnings": [
+        "추적성 매트릭스 최신화 필요"
+      ],
+      "recommendations": [
+        "요구사항별 산출물 매핑표 보완",
+        "산출물 내 요구사항 번호 표기"
+      ]
+    },
+    {
+      "scenario_key": "ui_match",
+      "scenario_label": "UI 일치성",
+      "status": "통과",
+      "score": 80,
+      "summary": "UI 설계와 실제 구현 결과가 대부분 일치하며, 주요 화면 구성 요소가 요구사항에 부합함.",
+      "findings": [
+        "UI 설계서와 구현 화면 비교 결과 일치"
+      ],
+      "warnings": [
+        "일부 버튼 위치 상이"
+      ],
+      "recommendations": [
+        "버튼 위치 및 명칭 일관성 재검토"
+      ]
+    },
+    {
+      "scenario_key": "coverage",
+      "scenario_label": "요구사항 커버리지",
+      "status": "보완 필요",
+      "score": 75,
+      "summary": "전체 요구사항 중 일부가 산출물에 반영되지 않아, 요구사항 커버리지 미달.",
+      "findings": [
+        "산출물에 미반영 요구사항 3건 발견"
+      ],
+      "warnings": [
+        "요구사항 누락 시 프로젝트 리스크 증가"
+      ],
+      "recommendations": [
+        "누락 요구사항 산출물 반영",
+        "커버리지 점검 프로세스 강화"
+      ]
+    }
+  ],
+  "priority_actions": [
+    "요구사항별 산출물 매핑표 보완 및 최신화",
+    "산출물 내 요구사항 번호 표기",
+    "누락 요구사항 산출물 반영",
+    "커버리지 점검 프로세스 강화",
+    "UI 버튼 위치 및 명칭 일관성 재검토",
+    "설명 보완 필요 항목에 추가 상세 내용 기입"
+  ]
+}

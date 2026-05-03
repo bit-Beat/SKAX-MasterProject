@@ -1,0 +1,17 @@
+{
+  "scenario_key": "traceability",
+  "scenario_label": "문서 연계성 점검",
+  "status": "통과",
+  "score": 72,
+  "summary": "요구사항, 기능, UI 간 ID 연결 구조를 점검했습니다.",
+  "findings": [
+    "요구사항 중 기능 정의로 연결되지 않은 ID가 있습니다. 예: REQ-003, REQ-009, REQ-015",
+    "기능 정의서의 화면ID가 UI 설계서와 연결되지 않습니다. 예: UI-004-TEMP, UI-007-EX, UI-014"
+  ],
+  "warnings": [
+    "요구사항-기능-UI 연결이 일부 구간에서 끊겨 있을 수 있습니다."
+  ],
+  "recommendations": [
+    "점검 결과 개선 필요 사항이 없습니다. 정기 점검을 유지하세요."
+  ]
+}

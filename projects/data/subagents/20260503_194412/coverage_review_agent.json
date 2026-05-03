@@ -1,0 +1,13 @@
+{
+  "scenario_key": "SC-004/coverage",
+  "summary": "요구사항 대비 기능 정의의 누락과 과잉을 분석했습니다.",
+  "score": 88,
+  "findings": [
+    "요구사항 대비 기능 정의가 누락된 항목이 있습니다. 예: REQ-003, REQ-009, REQ-015"
+  ],
+  "warnings": [],
+  "recommendations": [
+    "점검 결과 개선 필요 사항이 없습니다. 정기 점검을 유지하세요."
+  ],
+  "artifact_path": null
+}

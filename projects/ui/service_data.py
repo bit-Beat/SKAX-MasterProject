@@ -165,7 +165,7 @@ def get_scenario_order() -> list[str]:
 
 
 def get_scenario_config(scenario_key: str) -> dict:
-    return SCENARIOS[scenario_key]  # 선택한 시나리오 설정 반환
+    return SCENARIOS[scenario_key]#  # 선택한 시나리오 설정 반환
 
 
 def get_sample_result(scenario_key: str) -> dict:

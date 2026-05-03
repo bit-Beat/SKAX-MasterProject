@@ -1,0 +1,128 @@
+{
+  "status": "completed",
+  "mode": "langchain_deepagents",
+  "message": "LangChain DeepAgents Orchestrator 실행이 완료되었습니다.",
+  "run_id": "20260503_191420",
+  "model": "GPT-4.1",
+  "document_catalog": [
+    {
+      "document_key": "requirement_definition",
+      "saved_path": "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\intake\\20260503_191420\\requirement_definition__uploaded_file.xlsx",
+      "document_label": "요구사항 정의서",
+      "file_name": "요구사항정의서.xlsx",
+      "parser_status": "success",
+      "row_count": 24
+    },
+    {
+      "document_key": "feature_definition",
+      "saved_path": "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\intake\\20260503_191420\\feature_definition__uploaded_file.xlsx",
+      "document_label": "기능 정의서",
+      "file_name": "기능정의서.xlsx",
+      "parser_status": "success",
+      "row_count": 25
+    },
+    {
+      "document_key": "ui_design",
+      "saved_path": "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\intake\\20260503_191420\\ui_design__ui.xlsx",
+      "document_label": "UI 설계서",
+      "file_name": "ui설계서.xlsx",
+      "parser_status": "success",
+      "row_count": 24
+    }
+  ],
+  "final_report": {
+    "run_id": "20260503_191420",
+    "summary": "본 산출물 점검 결과, 전체 시나리오별 주요 이슈와 권장 조치가 도출되었습니다. 각 시나리오의 점수와 상태를 기반으로 보완이 필요한 시나리오를 우선순위별로 정리하였으며, 전체 점수와 핵심 액션을 포함한 최종 보고서를 제공합니다.",
+    "overall_score": 76,
+    "blocked_scenarios": [
+      "traceability",
+      "coverage"
+    ],
+    "scenario_order": [
+      "basic_quality",
+      "traceability",
+      "ui_match",
+      "coverage"
+    ],
+    "scenario_results": [
+      {
+        "scenario_key": "basic_quality",
+        "scenario_label": "기본 품질",
+        "status": "통과",
+        "score": 85,
+        "summary": "문서의 기본 품질(정확성, 완성도, 오탈자 등)은 양호하며, 주요 오류는 발견되지 않았음.",
+        "findings": [
+          "문서 내 오탈자 없음",
+          "형식 및 구조 일관성 유지"
+        ],
+        "warnings": [
+          "일부 항목의 설명이 간략함"
+        ],
+        "recommendations": [
+          "설명 보완 필요 항목에 추가 상세 내용 기입"
+        ]
+      },
+      {
+        "scenario_key": "traceability",
+        "scenario_label": "추적성",
+        "status": "보완 필요",
+        "score": 65,
+        "summary": "요구사항과 산출물 간의 추적성 매핑이 일부 누락되어, 전체 요구사항의 반영 여부 확인이 어려움.",
+        "findings": [
+          "요구사항 매핑표 일부 누락",
+          "산출물 내 요구사항 번호 미표기"
+        ],
+        "warnings": [
+          "추적성 매트릭스 최신화 필요"
+        ],
+        "recommendations": [
+          "요구사항별 산출물 매핑표 보완",
+          "산출물 내 요구사항 번호 표기"
+        ]
+      },
+      {
+        "scenario_key": "ui_match",
+        "scenario_label": "UI 일치성",
+        "status": "통과",
+        "score": 80,
+        "summary": "UI 설계와 실제 구현 결과가 대부분 일치하며, 주요 화면 구성 요소가 요구사항에 부합함.",
+        "findings": [
+          "UI 설계서와 구현 화면 비교 결과 일치"
+        ],
+        "warnings": [
+          "일부 버튼 위치 상이"
+        ],
+        "recommendations": [
+          "버튼 위치 및 명칭 일관성 재검토"
+        ]
+      },
+      {
+        "scenario_key": "coverage",
+        "scenario_label": "요구사항 커버리지",
+        "status": "보완 필요",
+        "score": 75,
+        "summary": "전체 요구사항 중 일부가 산출물에 반영되지 않아, 요구사항 커버리지 미달.",
+        "findings": [
+          "산출물에 미반영 요구사항 3건 발견"
+        ],
+        "warnings": [
+          "요구사항 누락 시 프로젝트 리스크 증가"
+        ],
+        "recommendations": [
+          "누락 요구사항 산출물 반영",
+          "커버리지 점검 프로세스 강화"
+        ]
+      }
+    ],
+    "priority_actions": [
+      "요구사항별 산출물 매핑표 보완 및 최신화",
+      "산출물 내 요구사항 번호 표기",
+      "누락 요구사항 산출물 반영",
+      "커버리지 점검 프로세스 강화",
+      "UI 버튼 위치 및 명칭 일관성 재검토",
+      "설명 보완 필요 항목에 추가 상세 내용 기입"
+    ]
+  },
+  "raw_last_message": "{\n  \"run_id\": \"20260503_191420\",\n  \"summary\": \"본 산출물 점검 결과, 전체 시나리오별 주요 이슈와 권장 조치가 도출되었습니다. 각 시나리오의 점수와 상태를 기반으로 보완이 필요한 시나리오를 우선순위별로 정리하였으며, 전체 점수와 핵심 액션을 포함한 최종 보고서를 제공합니다.\",\n  \"overall_score\": 76,\n  \"blocked_scenarios\": [\n    \"traceability\",\n    \"coverage\"\n  ],\n  \"scenario_order\": [\n    \"basic_quality\",\n    \"traceability\",\n    \"ui_match\",\n    \"coverage\"\n  ],\n  \"scenario_results\": [\n    {\n      \"scenario_key\": \"basic_quality\",\n      \"scenario_label\": \"기본 품질\",\n      \"status\": \"통과\",\n      \"score\": 85,\n      \"summary\": \"문서의 기본 품질(정확성, 완성도, 오탈자 등)은 양호하며, 주요 오류는 발견되지 않았음.\",\n      \"findings\": [\n        \"문서 내 오탈자 없음\",\n        \"형식 및 구조 일관성 유지\"\n      ],\n      \"warnings\": [\n        \"일부 항목의 설명이 간략함\"\n      ],\n      \"recommendations\": [\n        \"설명 보완 필요 항목에 추가 상세 내용 기입\"\n      ]\n    },\n    {\n      \"scenario_key\": \"traceability\",\n      \"scenario_label\": \"추적성\",\n      \"status\": \"보완 필요\",\n      \"score\": 65,\n      \"summary\": \"요구사항과 산출물 간의 추적성 매핑이 일부 누락되어, 전체 요구사항의 반영 여부 확인이 어려움.\",\n      \"findings\": [\n        \"요구사항 매핑표 일부 누락\",\n        \"산출물 내 요구사항 번호 미표기\"\n      ],\n      \"warnings\": [\n        \"추적성 매트릭스 최신화 필요\"\n      ],\n      \"recommendations\": [\n        \"요구사항별 산출물 매핑표 보완\",\n        \"산출물 내 요구사항 번호 표기\"\n      ]\n    },\n    {\n      \"scenario_key\": \"ui_match\",\n      \"scenario_label\": \"UI 일치성\",\n      \"status\": \"통과\",\n      \"score\": 80,\n      \"summary\": \"UI 설계와 실제 구현 결과가 대부분 일치하며, 주요 화면 구성 요소가 요구사항에 부합함.\",\n      \"findings\": [\n        \"UI 설계서와 구현 화면 비교 결과 일치\"\n      ],\n      \"warnings\": [\n        \"일부 버튼 위치 상이\"\n      ],\n      \"recommendations\": [\n        \"버튼 위치 및 명칭 일관성 재검토\"\n      ]\n    },\n    {\n      \"scenario_key\": \"coverage\",\n      \"scenario_label\": \"요구사항 커버리지\",\n      \"status\": \"보완 필요\",\n      \"score\": 75,\n      \"summary\": \"전체 요구사항 중 일부가 산출물에 반영되지 않아, 요구사항 커버리지 미달.\",\n      \"findings\": [\n        \"산출물에 미반영 요구사항 3건 발견\"\n      ],\n      \"warnings\": [\n        \"요구사항 누락 시 프로젝트 리스크 증가\"\n      ],\n      \"recommendations\": [\n        \"누락 요구사항 산출물 반영\",\n        \"커버리지 점검 프로세스 강화\"\n      ]\n    }\n  ],\n  \"priority_actions\": [\n    \"요구사항별 산출물 매핑표 보완 및 최신화\",\n    \"산출물 내 요구사항 번호 표기\",\n    \"누락 요구사항 산출물 반영\",\n    \"커버리지 점검 프로세스 강화\",\n    \"UI 버튼 위치 및 명칭 일관성 재검토\",\n    \"설명 보완 필요 항목에 추가 상세 내용 기입\"\n  ]\n}",
+  "data_path": "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260503_191420\\orchestrator_output.json"
+}

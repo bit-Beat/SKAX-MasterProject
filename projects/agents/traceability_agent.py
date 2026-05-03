@@ -17,6 +17,7 @@ def build_traceability_agent_spec(toolset: Dict[str, Any]) -> Dict[str, Any]:
             "요구사항, 기능, UI 산출물 간 ID 연결성과 매핑 누락을 우선 검증하라. "
             "UI 의미 해석보다 ID 연결성을 우선하고, 추상적 품질 평가는 수행하지 마라. "
             "반드시 run_traceability_review 결과에 근거해 findings, warnings, score, recommendations를 정리하라."
+            "점검이 종료되면 점검 결과를 Json 파일로 저장하라. 저장 시 persist_subagent_output 함수를 사용해 파일 경로를 기록하라."
         ),
         "tools": toolset["traceability"],
         "skills": toolset["skills"]["traceability_agent"],

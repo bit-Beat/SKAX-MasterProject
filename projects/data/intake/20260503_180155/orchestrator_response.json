@@ -1,0 +1,113 @@
+{
+  "status": "completed",
+  "mode": "langchain_deepagents",
+  "message": "LangChain DeepAgents Orchestrator 실행이 완료되었습니다.",
+  "run_id": "20260503_180155",
+  "model": "GPT-4.1",
+  "document_catalog": [
+    {
+      "document_key": "requirement_definition",
+      "saved_path": "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\intake\\20260503_180155\\requirement_definition__uploaded_file.xlsx",
+      "document_label": "요구사항 정의서",
+      "file_name": "요구사항정의서.xlsx",
+      "parser_status": "success",
+      "row_count": 24
+    },
+    {
+      "document_key": "feature_definition",
+      "saved_path": "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\intake\\20260503_180155\\feature_definition__uploaded_file.xlsx",
+      "document_label": "기능 정의서",
+      "file_name": "기능정의서.xlsx",
+      "parser_status": "success",
+      "row_count": 25
+    },
+    {
+      "document_key": "ui_design",
+      "saved_path": "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\intake\\20260503_180155\\ui_design__ui.xlsx",
+      "document_label": "UI 설계서",
+      "file_name": "ui설계서.xlsx",
+      "parser_status": "success",
+      "row_count": 24
+    }
+  ],
+  "final_report": {
+    "run_id": "final_review_20240611",
+    "summary": "본 보고서는 4개 시나리오(basic_quality, traceability, ui_match, coverage)에 대해 산출물 점검 결과를 통합하여 전체 품질 상태를 평가하였습니다. 기초 품질(basic_quality)은 매우 우수하나, 요구사항-기능-UI 연계(traceability), 기능-UI 매칭(ui_match), 요구사항-기능 커버리지(coverage)에서 일부 누락 및 미연결 사례가 발견되어 프로젝트 완성도와 연계성에 영향을 미칠 수 있습니다. 주요 이슈는 traceability에서의 연계 누락과 ui_match/coverage에서의 화면ID 및 요구사항 누락이며, 해당 시나리오들은 보완이 필요합니다. 전체 점수는 87점으로 산출되었으며, 우선적으로 연계 및 커버리지 보완이 권고됩니다.",
+    "overall_score": 87,
+    "blocked_scenarios": [
+      "traceability"
+    ],
+    "scenario_order": [
+      "basic_quality",
+      "traceability",
+      "ui_match",
+      "coverage"
+    ],
+    "scenario_results": [
+      {
+        "scenario_key": "basic_quality",
+        "scenario_label": "기초 품질 점검",
+        "status": "통과",
+        "score": 100,
+        "summary": "형식, 필수값, 용어 기준으로 기초 품질을 점검함",
+        "findings": [],
+        "warnings": [],
+        "recommendations": [
+          "정기 점검을 유지하세요."
+        ]
+      },
+      {
+        "scenario_key": "traceability",
+        "scenario_label": "요구사항-기능-UI 연계성 점검",
+        "status": "보완 필요",
+        "score": 72,
+        "summary": "요구사항, 기능 정의서, UI 설계서 간 ID 기반 연계 및 매핑 정합성 점검 결과, 일부 미연결 및 누락 사례 발견",
+        "findings": [
+          "요구사항 중 기능 정의로 연결되지 않은 ID 있음 (예: REQ-003, REQ-009, REQ-015)",
+          "기능 정의서의 화면ID가 UI 설계서와 연결되지 않음 (예: UI-004-TEMP, UI-007-EX, UI-014)"
+        ],
+        "warnings": [
+          "요구사항-기능-UI 연결이 일부 구간에서 누락될 수 있음"
+        ],
+        "recommendations": [
+          "요구사항-기능-UI 매핑표를 기준 문서로 고정하세요."
+        ]
+      },
+      {
+        "scenario_key": "ui_match",
+        "scenario_label": "기능-UI 매칭 점검",
+        "status": "통과",
+        "score": 88,
+        "summary": "기능 정의서와 UI 설계서 간 기능-화면 매칭 및 의미 일치 점검 결과, 화면ID 매칭 누락이 주요 이슈",
+        "findings": [
+          "기능 정의서의 화면ID가 UI 설계서에 존재하지 않는 사례 다수 발견 (예: UI-004-TEMP, UI-007-EX, UI-014)"
+        ],
+        "warnings": [],
+        "recommendations": [
+          "기능 정의서의 각 기능명과 화면ID를 UI 설계서와 1:1로 재매핑하여 누락된 화면ID를 보완할 것"
+        ]
+      },
+      {
+        "scenario_key": "coverage",
+        "scenario_label": "요구사항-기능 커버리지 점검",
+        "status": "통과",
+        "score": 88,
+        "summary": "요구사항 정의서와 기능 정의서 간 커버리지 점검 결과, 일부 요구사항(예: REQ-003, REQ-009, REQ-015)이 기능 정의에 반영되지 않은 누락 확인",
+        "findings": [
+          "요구사항 대비 기능 정의가 누락된 항목 있음 (예: REQ-003, REQ-009, REQ-015)"
+        ],
+        "warnings": [],
+        "recommendations": [
+          "요구사항을 기능 단위로 재분해하여 누락된 항목을 보완하세요."
+        ]
+      }
+    ],
+    "priority_actions": [
+      "요구사항-기능-UI 연계 매핑 누락 보완(traceability): 요구사항-기능-UI 매핑표를 기준 문서로 고정하고, 미연결된 ID 및 화면ID를 보완할 것",
+      "기능-UI 매칭 누락 보완(ui_match): 기능 정의서의 각 기능명과 화면ID를 UI 설계서와 1:1로 재매핑하여 누락된 화면ID를 보완할 것",
+      "요구사항-기능 커버리지 보완(coverage): 요구사항을 기능 단위로 재분해하여 누락된 항목을 보완할 것"
+    ]
+  },
+  "raw_last_message": "{\n  \"run_id\": \"final_review_20240611\",\n  \"summary\": \"본 보고서는 4개 시나리오(basic_quality, traceability, ui_match, coverage)에 대해 산출물 점검 결과를 통합하여 전체 품질 상태를 평가하였습니다. 기초 품질(basic_quality)은 매우 우수하나, 요구사항-기능-UI 연계(traceability), 기능-UI 매칭(ui_match), 요구사항-기능 커버리지(coverage)에서 일부 누락 및 미연결 사례가 발견되어 프로젝트 완성도와 연계성에 영향을 미칠 수 있습니다. 주요 이슈는 traceability에서의 연계 누락과 ui_match/coverage에서의 화면ID 및 요구사항 누락이며, 해당 시나리오들은 보완이 필요합니다. 전체 점수는 87점으로 산출되었으며, 우선적으로 연계 및 커버리지 보완이 권고됩니다.\",\n  \"overall_score\": 87,\n  \"blocked_scenarios\": [\n    \"traceability\"\n  ],\n  \"scenario_order\": [\n    \"basic_quality\",\n    \"traceability\",\n    \"ui_match\",\n    \"coverage\"\n  ],\n  \"scenario_results\": [\n    {\n      \"scenario_key\": \"basic_quality\",\n      \"scenario_label\": \"기초 품질 점검\",\n      \"status\": \"통과\",\n      \"score\": 100,\n      \"summary\": \"형식, 필수값, 용어 기준으로 기초 품질을 점검함\",\n      \"findings\": [],\n      \"warnings\": [],\n      \"recommendations\": [\n        \"정기 점검을 유지하세요.\"\n      ]\n    },\n    {\n      \"scenario_key\": \"traceability\",\n      \"scenario_label\": \"요구사항-기능-UI 연계성 점검\",\n      \"status\": \"보완 필요\",\n      \"score\": 72,\n      \"summary\": \"요구사항, 기능 정의서, UI 설계서 간 ID 기반 연계 및 매핑 정합성 점검 결과, 일부 미연결 및 누락 사례 발견\",\n      \"findings\": [\n        \"요구사항 중 기능 정의로 연결되지 않은 ID 있음 (예: REQ-003, REQ-009, REQ-015)\",\n        \"기능 정의서의 화면ID가 UI 설계서와 연결되지 않음 (예: UI-004-TEMP, UI-007-EX, UI-014)\"\n      ],\n      \"warnings\": [\n        \"요구사항-기능-UI 연결이 일부 구간에서 누락될 수 있음\"\n      ],\n      \"recommendations\": [\n        \"요구사항-기능-UI 매핑표를 기준 문서로 고정하세요.\"\n      ]\n    },\n    {\n      \"scenario_key\": \"ui_match\",\n      \"scenario_label\": \"기능-UI 매칭 점검\",\n      \"status\": \"통과\",\n      \"score\": 88,\n      \"summary\": \"기능 정의서와 UI 설계서 간 기능-화면 매칭 및 의미 일치 점검 결과, 화면ID 매칭 누락이 주요 이슈\",\n      \"findings\": [\n        \"기능 정의서의 화면ID가 UI 설계서에 존재하지 않는 사례 다수 발견 (예: UI-004-TEMP, UI-007-EX, UI-014)\"\n      ],\n      \"warnings\": [],\n      \"recommendations\": [\n        \"기능 정의서의 각 기능명과 화면ID를 UI 설계서와 1:1로 재매핑하여 누락된 화면ID를 보완할 것\"\n      ]\n    },\n    {\n      \"scenario_key\": \"coverage\",\n      \"scenario_label\": \"요구사항-기능 커버리지 점검\",\n      \"status\": \"통과\",\n      \"score\": 88,\n      \"summary\": \"요구사항 정의서와 기능 정의서 간 커버리지 점검 결과, 일부 요구사항(예: REQ-003, REQ-009, REQ-015)이 기능 정의에 반영되지 않은 누락 확인\",\n      \"findings\": [\n        \"요구사항 대비 기능 정의가 누락된 항목 있음 (예: REQ-003, REQ-009, REQ-015)\"\n      ],\n      \"warnings\": [],\n      \"recommendations\": [\n        \"요구사항을 기능 단위로 재분해하여 누락된 항목을 보완하세요.\"\n      ]\n    }\n  ],\n  \"priority_actions\": [\n    \"요구사항-기능-UI 연계 매핑 누락 보완(traceability): 요구사항-기능-UI 매핑표를 기준 문서로 고정하고, 미연결된 ID 및 화면ID를 보완할 것\",\n    \"기능-UI 매칭 누락 보완(ui_match): 기능 정의서의 각 기능명과 화면ID를 UI 설계서와 1:1로 재매핑하여 누락된 화면ID를 보완할 것\",\n    \"요구사항-기능 커버리지 보완(coverage): 요구사항을 기능 단위로 재분해하여 누락된 항목을 보완할 것\"\n  ]\n}",
+  "data_path": "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260503_180155\\orchestrator_output.json"
+}
