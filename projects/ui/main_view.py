@@ -1,11 +1,11 @@
 """중앙 메인 화면을 구성하는 파일."""
 
-import time
-import streamlit as st
-
+from collections.abc import Callable
 import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
+
+import streamlit as st
 
 
 from main import run_backend_pipeline
@@ -19,6 +19,7 @@ from ui.service_data import (
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SUBAGENT_DATA_ROOT = PROJECT_ROOT / "data" / "subagents"
+STREAM_LOG_LIMIT = 12
 
 
 def load_json_dict(file_path: Path) -> dict:
@@ -119,6 +120,43 @@ def count_recent_run_requests(days: int = 7) -> int:
     return count
 
 
+def clamp_stream_progress(value: object) -> float:
+    """Normalize a progress-like value to the 0.0~1.0 range."""
+    try:
+        progress = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(progress, 1.0))
+
+
+def build_stream_callback(
+    status_placeholder: st.delta_generator.DeltaGenerator,
+    progress_bar: st.delta_generator.DeltaGenerator,
+    log_placeholder: st.delta_generator.DeltaGenerator,
+) -> Callable[[dict[str, object]], None]:
+    """Build a UI callback that renders translated Agent events in the right panel."""
+    recent_logs: list[str] = []
+
+    def handle_stream_event(event: dict[str, object]) -> None:
+        message = str(event.get("message") or "Agent가 작업을 진행하고 있습니다.")
+        kind = str(event.get("kind") or "status")
+        progress = clamp_stream_progress(event.get("progress"))
+
+        progress_bar.progress(progress, text=message)
+        if kind == "success":
+            status_placeholder.success(message)
+        elif kind == "error":
+            status_placeholder.error(message)
+        else:
+            status_placeholder.info(message)
+
+        recent_logs.append(message)
+        del recent_logs[:-STREAM_LOG_LIMIT]
+        log_placeholder.markdown("\n".join(f"- {line}" for line in recent_logs))
+
+    return handle_stream_event
+
+
 def render_main_view() -> None:
     """메인 화면 전체를 순서대로 렌더링합니다."""
     scenario_order = get_scenario_order()  # 통합 실행 시나리오 순서 [basic_quality, traceability, ui_match, coverage]
@@ -176,7 +214,21 @@ def render_execute_section(scenario_order: list[str]) -> None:
     st.divider()
     st.subheader("통합 점검 실행")
 
+    completion_notice = st.session_state.pop("post_run_notice", "")
+    if completion_notice:
+        st.success(completion_notice)
+
     left, right = st.columns([1.35, 1.0])
+
+    with right:
+        # 우측은 통합 실행 흐름과 Agent 진행 상황을 안내합니다.
+        st.write("🛰 Agent 진행 상황")
+        stream_status = st.empty()
+        stream_status.info("통합 점검을 실행하면 Main Agent와 서브에이전트 진행 상황이 여기에 표시됩니다.")
+        stream_progress = st.progress(0, text="실행 대기 중입니다.")
+        stream_log = st.empty()
+        stream_log.caption("아직 실행된 로그가 없습니다.")
+        stream_callback = build_stream_callback(stream_status, stream_progress, stream_log)
 
     with left:
         # 좌측은 사용자가 직접 문서를 올리고 요청을 입력하는 영역입니다.
@@ -212,14 +264,18 @@ def render_execute_section(scenario_order: list[str]) -> None:
                     "file": ui_file,
                 },
             }  # 업로드 문서 정보 맵
-            run_integrated_check(uploaded_documents, scenario_order)  # 통합 점검 실행
+            run_integrated_check(
+                uploaded_documents,
+                scenario_order,
+                stream_callback=stream_callback,
+            )  # 통합 점검 실행
 
-    with right:
-        # 우측은 Agent Streaming 정보를 제공합니다.
-        st.info("Agent의 실시간 응답이 표시됩니다.")
 
-
-def run_integrated_check(uploaded_documents: dict[str, dict], scenario_order: list[str],) -> None:
+def run_integrated_check(
+    uploaded_documents: dict[str, dict],
+    scenario_order: list[str],
+    stream_callback: Callable[[dict[str, object]], None] | None = None,
+) -> None:
     """업로드 파일을 JSON으로 정리한 뒤 통합 점검 상태를 갱신합니다."""
     uploaded_file_names = [
         document["file"].name for document in uploaded_documents.values() if document["file"] is not None
@@ -229,41 +285,38 @@ def run_integrated_check(uploaded_documents: dict[str, dict], scenario_order: li
         st.warning("필수 문서를 모두 업로드해야 합니다.")
         return
 
-    total_steps = len(scenario_order) + 2  # JSON 생성 + Orchestrator 준비 + 시나리오 수(4)
     status_text = st.empty()  # 단계 상태 메시지 영역
     progress_bar = st.progress(0, text="통합 점검 준비 중입니다.")  # 실행 진행률 표시
+    status_text.info("업로드 문서와 요청 사항을 정리하고 있습니다.")
+    progress_bar.progress(0.05, text="업로드 문서와 요청 사항을 정리하고 있습니다.")
 
-    status_text.info(f"1/{total_steps} 단계 실행 중: 업로드 문서 JSON 생성")
+    def handle_stream_event(event: dict[str, object]) -> None:
+        message = str(event.get("message") or "Agent가 작업을 진행하고 있습니다.")
+        kind = str(event.get("kind") or "status")
+        raw_progress = clamp_stream_progress(event.get("progress"))
+        ui_progress = min(0.15 + (raw_progress * 0.85), 1.0 if kind == "success" else 0.98)
+
+        progress_bar.progress(ui_progress, text=message)
+        if kind == "success":
+            status_text.success(message)
+        elif kind == "error":
+            status_text.error(message)
+        else:
+            status_text.info(message)
+
+        if stream_callback is not None:
+            stream_callback(event)
 
     # 백엔드 파이프라인 실행
     backend_result = run_backend_pipeline(
         uploaded_documents=uploaded_documents,  # 업로드한 파일 dict
         user_request=st.session_state.extra_request.strip(),  # 추가 요청 사항
         scenario_order=scenario_order,  # 시나리오 순서
+        stream_callback=handle_stream_event,
     )
 
-    progress_bar.progress(
-        1 / total_steps,
-        text="업로드 문서 JSON 생성 완료",
-    )
-
-    status_text.info(f"2/{total_steps} 단계 실행 중: Orchestrator 요청 준비")
-    time.sleep(0.2)
-    progress_bar.progress(
-        2 / total_steps,
-        text="Orchestrator 요청 준비 완료",
-    )
-
-    for index, scenario_key in enumerate(scenario_order, start=3):
-        scenario = get_scenario_config(scenario_key)  # 현재 실행 시나리오 정보
-        status_text.info(f"{index}/{total_steps} 단계 실행 중: {scenario['label']}")
-        time.sleep(0.25)  # 현재는 샘플 UI 이므로 짧은 대기만 둡니다.
-        progress_bar.progress(
-            index / total_steps,
-            text=f"{scenario['label']} 완료",
-        )
-
-    status_text.success("문서 JSON 생성과 Orchestrator 준비를 마치고, 모든 시나리오 반영을 완료했습니다.")
+    progress_bar.progress(1.0, text="통합 점검 결과를 정리했습니다.")
+    status_text.success("문서 JSON 생성과 통합 점검을 모두 완료했습니다.")
 
     st.session_state.has_run = True  # 실행 완료 여부 저장
     st.session_state.prepared_payload = backend_result["agent_request"]  # 생성된 JSON payload 저장
@@ -278,7 +331,8 @@ def run_integrated_check(uploaded_documents: dict[str, dict], scenario_order: li
         "run_id": backend_result["run_id"],  # 최근 실행 ID
     }
 
-    st.success("통합 점검 결과를 갱신했습니다.")
+    st.session_state.post_run_notice = "통합 점검 결과를 갱신했습니다."
+    st.rerun()
 
 
 def render_result_section(results: dict, scenario_order: list[str]) -> None:
@@ -299,6 +353,49 @@ def render_result_section(results: dict, scenario_order: list[str]) -> None:
 
 def render_summary_tab(results: dict, scenario_order: list[str]) -> None:
     """통합 요약 탭에서 우선 확인해야 할 시나리오를 보여줍니다."""
+    del scenario_order
+
+    final_report = results.get("final_report", results) if isinstance(results, dict) else {}
+    if not isinstance(final_report, dict) or not final_report:
+        st.info("표시할 통합 요약 결과가 없습니다.")
+        return
+
+    summary = str(final_report.get("summary") or "최종 보고서 요약이 없습니다.")
+    overall_score = final_report.get("overall_score", 0)
+    if not isinstance(overall_score, (int, float)):
+        overall_score = 0
+
+    priority_actions = final_report.get("priority_actions", [])
+    if not isinstance(priority_actions, list):
+        priority_actions = []
+
+    if overall_score >= 85:
+        score_status = "양호"
+        summary_renderer = st.success
+    elif overall_score >= 70:
+        score_status = "검토 필요"
+        summary_renderer = st.warning
+    else:
+        score_status = "보완 필요"
+        summary_renderer = st.error
+
+    st.markdown("### 통합 점검 요약")
+    metric_cols = st.columns([1.0, 1.2])
+    with metric_cols[0]:
+        st.metric("전체 점수", f"{int(round(overall_score))}점", border=True)
+    with metric_cols[1]:
+        st.metric("판정", score_status, border=True)
+
+    st.progress(max(0.0, min(float(overall_score) / 100.0, 1.0)))
+    summary_renderer(summary)
+
+    st.divider()
+    st.markdown("### 우선순위 액션")
+    if priority_actions:
+        for index, action in enumerate(priority_actions, start=1):
+            st.write(f"{index}. {action}")
+    else:
+        st.info("우선 조치가 필요한 항목이 없습니다.")
 
 
 def render_scenario_results(results: dict, scenario_order: list[str]) -> None:
@@ -334,11 +431,6 @@ def render_scenario_results(results: dict, scenario_order: list[str]) -> None:
     if overall_score <= 75:
         st.error(f"기준 미달: 전체 점수가 {overall_score}점으로 기준 75점 이하입니다.")
     st.success(summary)
-
-    if priority_actions:
-        st.markdown("#### 우선순위 액션")
-        for index, action in enumerate(priority_actions, start=1):
-            st.write(f"{index}. {action}")
 
     st.divider()
     st.markdown("### 시나리오별 상세 결과")

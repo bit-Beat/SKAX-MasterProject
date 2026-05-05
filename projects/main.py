@@ -7,6 +7,7 @@ import json
 import mimetypes
 import re
 import sys
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,7 @@ def run_backend_pipeline(
     uploaded_documents: dict[str, dict[str, Any]], # 업로드한 산출물
     user_request: str, # 사용자 추가 요청 사항
     scenario_order: list[str], # 점검 시나리오 순서
+    stream_callback: Callable[[dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """업로드 문서를 JSON payload로 만들고 Orchestrator에 전달합니다."""
     
@@ -61,7 +63,19 @@ def run_backend_pipeline(
     agent_request["request_path"] = str(request_path)  # DeepAgents 프롬프트에서 참고할 intake payload 경로
     write_json_file(request_path, agent_request) # reqeust_path로 json 파일 저장 intake/run_id/agent_request.json
     
-    orchestrator_response = run_orchestrator(agent_request)  # 현재는 Orchestrator 스텁 호출
+    if stream_callback is not None:
+        stream_callback(
+            {
+                "kind": "status",
+                "message": "Orchestrator가 통합 점검을 준비하고 있습니다.",
+                "progress": 0.02,
+            }
+        )
+
+    orchestrator_response = run_orchestrator(
+        agent_request,
+        on_stream_event=stream_callback,
+    )
     response_path = run_dir / "orchestrator_response.json"  # Orchestrator 응답 JSON 경로
     write_json_file(response_path, orchestrator_response)
 

@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Dict, List
 
 from deepagents import create_deep_agent
+from langgraph.types import Overwrite
 from langchain_openai import AzureChatOpenAI
 
 from agents.agent_models import FinalReviewReport
@@ -18,7 +20,7 @@ from agents.report_agent import build_report_agent_spec
 from agents.traceability_agent import build_traceability_agent_spec
 from agents.ui_match_agent import build_ui_match_agent_spec
 from tools.review_tools import build_toolset, get_document_catalog_data
-from utils.common_method import save_json, log, pretty_trace
+from utils.common_method import save_json, log
 from utils.config_loader import load_config
 
 
@@ -49,6 +51,52 @@ SUBAGENT_BUILDERS = [
     build_report_agent_spec,
 ]  # 역할별 SubAgent 구성을 개별 파일에서 읽어오는 빌더 목록
 
+SUBAGENT_DISPLAY = {
+    "basic-quality-agent": {
+        "label": "기초 품질 점검",
+        "progress_key": "basic_quality",
+        "counts_progress": True,
+    },
+    "traceability-agent": {
+        "label": "문서 연결성 점검",
+        "progress_key": "traceability",
+        "counts_progress": True,
+    },
+    "ui-match-agent": {
+        "label": "기능-화면 일치 점검",
+        "progress_key": "ui_match",
+        "counts_progress": True,
+    },
+    "coverage-agent": {
+        "label": "기능 완전성 분석",
+        "progress_key": "coverage",
+        "counts_progress": True,
+    },
+    "qa-agent": {
+        "label": "추가 확인 질문 정리",
+        "progress_key": "qa",
+        "counts_progress": False,
+    },
+    "report-agent": {
+        "label": "최종 보고서 작성",
+        "progress_key": "report",
+        "counts_progress": True,
+    },
+}
+
+TOOL_DISPLAY = {
+    "get_document_catalog": "문서 목록 확인",
+    "get_document_preview": "문서 미리보기 조회",
+    "get_scenario_definition": "시나리오 기준 확인",
+    "run_basic_quality_review": "기초 품질 점검 실행",
+    "run_traceability_review": "문서 연결성 점검 실행",
+    "run_ui_match_review": "기능-화면 일치 점검 실행",
+    "run_coverage_review": "기능 완전성 분석 실행",
+    "build_improvement_actions": "개선 액션 생성",
+    "persist_subagent_output": "결과 저장",
+    "get_subagent_outputs": "서브에이전트 결과 수집",
+}
+
 
 def create_orchestrator_agent(agent_request: Dict[str, Any]):
     """공식 DeepAgents 형태로 Orchestrator를 생성합니다."""
@@ -66,15 +114,21 @@ def create_orchestrator_agent(agent_request: Dict[str, Any]):
     )
 
 
-def run_orchestrator(agent_request: Dict[str, Any]) -> Dict[str, Any]:
+def run_orchestrator(
+    agent_request: Dict[str, Any],
+    on_stream_event: Callable[[Dict[str, Any]], None] | None = None,
+) -> Dict[str, Any]:
     """DeepAgents 실행 후 결과를 반환합니다."""
     run_id = agent_request.get("run_id", "manual_run")
     agent = create_orchestrator_agent(agent_request)
     task = build_task_prompt(agent_request)
 
-    raw_result = agent.invoke({"messages": [{"role": "user", "content": task}]}) ### DeepAgents 실행
-    pretty_trace(raw_result)
-    #log(f"Orchestrator raw_result : {raw_result}", "info")
+    raw_result = stream_agent_and_build_result(
+        agent=agent,
+        task=task,
+        scenario_order=agent_request.get("scenario_order", []),
+        on_stream_event=on_stream_event,
+    )
 
     final_report = normalize_report(
         run_id=run_id,
@@ -86,7 +140,7 @@ def run_orchestrator(agent_request: Dict[str, Any]) -> Dict[str, Any]:
  
     result = {
         "status": "completed",
-        "mode": "langchain_deepagents",
+        "mode": "langchain_deepagents_streaming",
         "message": "LangChain DeepAgents Orchestrator 실행이 완료되었습니다.",
         "run_id": run_id,
         "model": LLM.profile["name"],
@@ -94,6 +148,14 @@ def run_orchestrator(agent_request: Dict[str, Any]) -> Dict[str, Any]:
         "final_report": final_report,
         "raw_last_message": extract_last_message(raw_result),
     }
+    emit_stream_event(
+        {
+            "kind": "success",
+            "message": "Main Agent가 최종 보고서를 정리했습니다.",
+            "progress": 1.0,
+        },
+        on_stream_event,
+    )
     return save_orchestrator_result(run_id, result)
 
 
@@ -357,8 +419,491 @@ def extract_last_message(raw_result: Dict[str, Any]) -> str:
     messages = raw_result.get("messages", [])
     if not messages:
         return ""
-    content = getattr(messages[-1], "content", "")
+    content = get_message_content(messages[-1])
     return content if isinstance(content, str) else json.dumps(content, ensure_ascii=False, default=str)
+
+
+def stream_agent_and_build_result(
+    agent: Any,
+    task: str,
+    scenario_order: List[str],
+    on_stream_event: Callable[[Dict[str, Any]], None] | None = None,
+) -> Dict[str, Any]:
+    """DeepAgents 스트림 이벤트를 사용자 친화적 상태로 변환하고 최종 상태를 재구성합니다."""
+    raw_result: Dict[str, Any] = {
+        "messages": [],
+        "structured_response": None,
+    }
+    seen_messages: set[str] = set()
+    seen_task_call_ids: set[str] = set()
+    seen_completed_task_call_ids: set[str] = set()
+    seen_subagent_running: set[str] = set()
+    seen_tool_call_ids: set[tuple[str, str]] = set()
+    active_subagents: Dict[str, Dict[str, Any]] = {}
+    completed_units: set[str] = set()
+    latest_state: Dict[str, Any] = {}
+    total_units = max(len(list(scenario_order)) + 1, 1)
+    main_status_sent = False
+
+    emit_stream_event(
+        {
+            "kind": "status",
+            "message": "Main Agent가 통합 점검 계획을 세우고 있습니다.",
+            "progress": build_progress_value(total_units, completed_units, phase="preparing"),
+        },
+        on_stream_event,
+    )
+
+    for chunk in agent.stream(
+        {"messages": [{"role": "user", "content": task}]},
+        stream_mode=["updates", "values"],
+        subgraphs=True,
+        version="v2",
+    ):
+        if not isinstance(chunk, dict):
+            continue
+
+        chunk_type = str(chunk.get("type") or "")
+        namespace = tuple(str(item) for item in (chunk.get("ns") or ()))
+        data = chunk.get("data") or {}
+
+        if chunk_type == "values":
+            if isinstance(data, dict):
+                latest_state = data
+                merge_state_into_raw_result(raw_result, data, seen_messages)
+            continue
+
+        if chunk_type != "updates" or not isinstance(data, dict):
+            continue
+
+        if not namespace and not main_status_sent:
+            emit_stream_event(
+                {
+                    "kind": "status",
+                    "message": "Main Agent가 점검 순서를 조율하고 있습니다.",
+                    "progress": build_progress_value(total_units, completed_units, phase="running"),
+                },
+                on_stream_event,
+            )
+            main_status_sent = True
+
+        if not namespace:
+            process_main_agent_updates(
+                data=data,
+                raw_result=raw_result,
+                seen_messages=seen_messages,
+                seen_task_call_ids=seen_task_call_ids,
+                seen_completed_task_call_ids=seen_completed_task_call_ids,
+                active_subagents=active_subagents,
+                completed_units=completed_units,
+                total_units=total_units,
+                on_stream_event=on_stream_event,
+            )
+            continue
+
+        process_subagent_updates(
+            namespace=namespace,
+            data=data,
+            raw_result=raw_result,
+            seen_messages=seen_messages,
+            seen_subagent_running=seen_subagent_running,
+            seen_tool_call_ids=seen_tool_call_ids,
+            active_subagents=active_subagents,
+            completed_units=completed_units,
+            total_units=total_units,
+            on_stream_event=on_stream_event,
+        )
+
+    if latest_state:
+        merge_state_into_raw_result(raw_result, latest_state, seen_messages)
+
+    return raw_result
+
+
+def process_main_agent_updates(
+    data: Dict[str, Any],
+    raw_result: Dict[str, Any],
+    seen_messages: set[str],
+    seen_task_call_ids: set[str],
+    seen_completed_task_call_ids: set[str],
+    active_subagents: Dict[str, Dict[str, Any]],
+    completed_units: set[str],
+    total_units: int,
+    on_stream_event: Callable[[Dict[str, Any]], None] | None,
+) -> None:
+    """메인 에이전트 업데이트에서 서브에이전트 시작/완료 이벤트를 추출합니다."""
+    for node_data in data.values():
+        if not isinstance(node_data, dict):
+            continue
+
+        merge_state_into_raw_result(raw_result, node_data, seen_messages)
+        messages = coerce_messages(node_data.get("messages"))
+
+        for message in messages:
+            for tool_call in extract_tool_calls_from_message(message):
+                if get_tool_call_name(tool_call) != "task":
+                    continue
+
+                task_call_id = get_tool_call_id(tool_call)
+                if not task_call_id or task_call_id in seen_task_call_ids:
+                    continue
+
+                args = get_tool_call_args(tool_call)
+                subagent_type = normalize_subagent_type(
+                    args.get("subagent_type") or args.get("agent_type") or args.get("subagent_name")
+                )
+                meta = build_subagent_meta(subagent_type)
+                active_subagents[task_call_id] = meta
+                seen_task_call_ids.add(task_call_id)
+
+                emit_stream_event(
+                    {
+                        "kind": "status",
+                        "message": f"{meta['label']}을 시작했습니다.",
+                        "progress": build_progress_value(
+                            total_units,
+                            completed_units,
+                            meta=meta,
+                            phase="started",
+                        ),
+                    },
+                    on_stream_event,
+                )
+
+            if get_message_type(message) != "tool":
+                continue
+
+            if get_message_name(message) != "task":
+                continue
+
+            task_call_id = get_message_tool_call_id(message)
+            if not task_call_id or task_call_id in seen_completed_task_call_ids:
+                continue
+
+            meta = active_subagents.get(task_call_id, build_subagent_meta(""))
+            seen_completed_task_call_ids.add(task_call_id)
+
+            if meta.get("counts_progress", True):
+                completed_units.add(str(meta["progress_key"]))
+
+            emit_stream_event(
+                {
+                    "kind": "success",
+                    "message": f"{meta['label']}이 완료되었습니다.",
+                    "progress": build_progress_value(
+                        total_units,
+                        completed_units,
+                        meta=meta,
+                        phase="completed",
+                    ),
+                },
+                on_stream_event,
+            )
+
+
+def process_subagent_updates(
+    namespace: tuple[str, ...],
+    data: Dict[str, Any],
+    raw_result: Dict[str, Any],
+    seen_messages: set[str],
+    seen_subagent_running: set[str],
+    seen_tool_call_ids: set[tuple[str, str]],
+    active_subagents: Dict[str, Dict[str, Any]],
+    completed_units: set[str],
+    total_units: int,
+    on_stream_event: Callable[[Dict[str, Any]], None] | None,
+) -> None:
+    """서브에이전트 업데이트에서 실행 상태와 내부 툴 사용 이벤트를 추출합니다."""
+    task_call_id, meta = find_active_subagent(namespace, active_subagents)
+    if not task_call_id:
+        return
+
+    if task_call_id not in seen_subagent_running:
+        seen_subagent_running.add(task_call_id)
+        emit_stream_event(
+            {
+                "kind": "status",
+                "message": f"{meta['label']}이 문서를 분석하고 있습니다.",
+                "progress": build_progress_value(
+                    total_units,
+                    completed_units,
+                    meta=meta,
+                    phase="running",
+                ),
+            },
+            on_stream_event,
+        )
+
+    for node_data in data.values():
+        if not isinstance(node_data, dict):
+            continue
+
+        merge_state_into_raw_result(raw_result, node_data, seen_messages)
+        messages = coerce_messages(node_data.get("messages"))
+
+        for message in messages:
+            for tool_call in extract_tool_calls_from_message(message):
+                tool_name = get_tool_call_name(tool_call)
+                if not tool_name or tool_name == "task":
+                    continue
+
+                internal_call_id = get_tool_call_id(tool_call) or tool_name
+                dedupe_key = (task_call_id, internal_call_id)
+                if dedupe_key in seen_tool_call_ids:
+                    continue
+
+                seen_tool_call_ids.add(dedupe_key)
+                emit_stream_event(
+                    {
+                        "kind": "status",
+                        "message": f"{meta['label']}이 {get_tool_display_name(tool_name)}를 사용하고 있습니다.",
+                        "progress": build_progress_value(
+                            total_units,
+                            completed_units,
+                            meta=meta,
+                            phase="tool",
+                        ),
+                    },
+                    on_stream_event,
+                )
+
+
+def merge_state_into_raw_result(
+    raw_result: Dict[str, Any],
+    state: Dict[str, Any],
+    seen_messages: set[str],
+) -> None:
+    """스트림 중간 상태에서 messages와 structured_response를 누적합니다."""
+    messages = coerce_messages(state.get("messages"))
+    if messages:
+        append_messages(raw_result["messages"], messages, seen_messages)
+
+    structured_response = unwrap_stream_value(state.get("structured_response"))
+    if structured_response is not None:
+        raw_result["structured_response"] = structured_response
+
+
+def append_messages(
+    target_messages: List[Any],
+    new_messages: List[Any],
+    seen_messages: set[str],
+) -> None:
+    """중복 없이 메시지를 누적합니다."""
+    for message in new_messages:
+        signature = build_message_signature(message)
+        if signature in seen_messages:
+            continue
+        seen_messages.add(signature)
+        target_messages.append(message)
+
+
+def unwrap_stream_value(value: Any) -> Any:
+    """LangGraph stream wrapper를 실제 값으로 풀어냅니다."""
+    if isinstance(value, Overwrite):
+        return value.value
+    return value
+
+
+def coerce_messages(value: Any) -> List[Any]:
+    """messages 필드를 항상 순회 가능한 list 형태로 맞춥니다."""
+    unwrapped = unwrap_stream_value(value)
+    if isinstance(unwrapped, list):
+        return unwrapped
+    return []
+
+
+def build_message_signature(message: Any) -> str:
+    """스트림 메시지 중복 제거용 서명을 생성합니다."""
+    message_id = message.get("id") if isinstance(message, dict) else getattr(message, "id", None)
+    if message_id:
+        return f"id:{message_id}"
+
+    payload = {
+        "type": get_message_type(message),
+        "name": get_message_name(message),
+        "tool_call_id": get_message_tool_call_id(message),
+        "content": get_message_content(message),
+    }
+    return json.dumps(payload, ensure_ascii=False, default=str, sort_keys=True)
+
+
+def extract_tool_calls_from_message(message: Any) -> List[Any]:
+    """AIMessage 또는 dict 형태에서 tool_calls를 안전하게 추출합니다."""
+    tool_calls = getattr(message, "tool_calls", None)
+    if isinstance(tool_calls, list):
+        return tool_calls
+
+    if isinstance(message, dict):
+        dict_calls = message.get("tool_calls")
+        if isinstance(dict_calls, list):
+            return dict_calls
+
+    additional_kwargs = getattr(message, "additional_kwargs", None)
+    if isinstance(additional_kwargs, dict):
+        kw_calls = additional_kwargs.get("tool_calls")
+        if isinstance(kw_calls, list):
+            return kw_calls
+
+    return []
+
+
+def get_tool_call_name(tool_call: Any) -> str:
+    """tool_call에서 툴 이름을 꺼냅니다."""
+    if isinstance(tool_call, dict):
+        return str(tool_call.get("name") or "")
+    return str(getattr(tool_call, "name", "") or "")
+
+
+def get_tool_call_id(tool_call: Any) -> str:
+    """tool_call에서 호출 ID를 꺼냅니다."""
+    if isinstance(tool_call, dict):
+        return str(tool_call.get("id") or "")
+    return str(getattr(tool_call, "id", "") or "")
+
+
+def get_tool_call_args(tool_call: Any) -> Dict[str, Any]:
+    """tool_call 인자를 dict로 표준화합니다."""
+    if isinstance(tool_call, dict):
+        args = tool_call.get("args") or {}
+    else:
+        args = getattr(tool_call, "args", {}) or {}
+
+    return args if isinstance(args, dict) else {}
+
+
+def get_message_type(message: Any) -> str:
+    """메시지 타입을 소문자 문자열로 반환합니다."""
+    if isinstance(message, dict):
+        return str(message.get("type") or message.get("role") or "dict").lower()
+
+    message_type = getattr(message, "type", None)
+    if message_type:
+        return str(message_type).lower()
+    return message.__class__.__name__.lower()
+
+
+def get_message_name(message: Any) -> str:
+    """메시지의 name 필드를 안전하게 반환합니다."""
+    if isinstance(message, dict):
+        return str(message.get("name") or "")
+    return str(getattr(message, "name", "") or "")
+
+
+def get_message_tool_call_id(message: Any) -> str:
+    """메시지의 tool_call_id를 안전하게 반환합니다."""
+    if isinstance(message, dict):
+        return str(message.get("tool_call_id") or "")
+    return str(getattr(message, "tool_call_id", "") or "")
+
+
+def get_message_content(message: Any) -> Any:
+    """메시지의 content를 안전하게 반환합니다."""
+    if isinstance(message, dict):
+        return message.get("content", "")
+    return getattr(message, "content", "")
+
+
+def normalize_subagent_type(value: Any) -> str:
+    """여러 서브에이전트 표기를 canonical key로 통일합니다."""
+    raw_value = str(value or "").strip()
+    if "/" in raw_value:
+        raw_value = raw_value.split("/")[-1]
+
+    normalized = raw_value.replace("_", "-").lower()
+    aliases = {
+        "basic-quality-agent": "basic-quality-agent",
+        "basic-quality": "basic-quality-agent",
+        "basic-quality-review-agent": "basic-quality-agent",
+        "basic-quality-check": "basic-quality-agent",
+        "basic-quality-check-agent": "basic-quality-agent",
+        "traceability-agent": "traceability-agent",
+        "traceability": "traceability-agent",
+        "ui-match-agent": "ui-match-agent",
+        "ui-match": "ui-match-agent",
+        "coverage-agent": "coverage-agent",
+        "coverage": "coverage-agent",
+        "report-agent": "report-agent",
+        "report": "report-agent",
+        "qa-agent": "qa-agent",
+        "qa": "qa-agent",
+    }
+    return aliases.get(normalized, normalized)
+
+
+def build_subagent_meta(subagent_type: str) -> Dict[str, Any]:
+    """서브에이전트 표시용 메타데이터를 구성합니다."""
+    normalized = normalize_subagent_type(subagent_type)
+    defaults = SUBAGENT_DISPLAY.get(
+        normalized,
+        {
+            "label": normalized or "서브에이전트",
+            "progress_key": normalized or "subagent",
+            "counts_progress": False,
+        },
+    )
+    return {
+        "type": normalized,
+        "label": defaults["label"],
+        "progress_key": defaults["progress_key"],
+        "counts_progress": defaults["counts_progress"],
+    }
+
+
+def find_active_subagent(
+    namespace: tuple[str, ...],
+    active_subagents: Dict[str, Dict[str, Any]],
+) -> tuple[str, Dict[str, Any]]:
+    """namespace에서 현재 서브에이전트 task_call_id를 찾아냅니다."""
+    for task_call_id, meta in active_subagents.items():
+        if any(task_call_id == segment or task_call_id in segment for segment in namespace):
+            return task_call_id, meta
+    return "", {}
+
+
+def get_tool_display_name(tool_name: str) -> str:
+    """툴 이름을 사용자용 라벨로 변환합니다."""
+    return TOOL_DISPLAY.get(tool_name, tool_name.replace("_", " "))
+
+
+def build_progress_value(
+    total_units: int,
+    completed_units: set[str],
+    meta: Dict[str, Any] | None = None,
+    phase: str = "running",
+) -> float:
+    """서브에이전트 이벤트를 UI 진행률 값으로 변환합니다."""
+    if total_units <= 0:
+        return 0.0
+
+    completed_count = len(completed_units)
+    phase_weights = {
+        "preparing": 0.05,
+        "started": 0.20,
+        "running": 0.45,
+        "tool": 0.72,
+    }
+
+    if phase == "completed":
+        if meta and not meta.get("counts_progress", True):
+            return min((completed_count + 0.9) / total_units, 0.98)
+        return min(completed_count / total_units, 1.0)
+
+    weight = phase_weights.get(phase, 0.45)
+    if meta and not meta.get("counts_progress", True):
+        weight = min(weight, 0.35)
+
+    return min((completed_count + weight) / total_units, 0.98)
+
+
+def emit_stream_event(
+    event: Dict[str, Any],
+    on_stream_event: Callable[[Dict[str, Any]], None] | None,
+) -> None:
+    """사용자 스트림 이벤트를 콜백과 로그로 동시에 전달합니다."""
+    if on_stream_event is not None:
+        on_stream_event(event)
+
+    log(event.get("message", "Agent가 작업 중입니다."), "info")
 
 
 def save_orchestrator_result(run_id: str, result: Dict[str, Any]) -> Dict[str, Any]:
