@@ -1,0 +1,14 @@
+{
+  "run_id": "20260505_145030",
+  "summary": "구조화 응답이 비어 있습니다.",
+  "overall_score": 0,
+  "blocked_scenarios": [],
+  "scenario_order": [
+    "basic_quality",
+    "traceability",
+    "ui_match",
+    "coverage"
+  ],
+  "scenario_results": [],
+  "priority_actions": []
+}

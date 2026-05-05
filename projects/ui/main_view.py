@@ -4,6 +4,7 @@ import time
 import streamlit as st
 
 import json
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 
@@ -11,34 +12,136 @@ from main import run_backend_pipeline
 from ui.service_data import (
     INTEGRATED_SERVICE,
     get_all_required_files,
-    get_all_sample_results,
     get_result_view_label,
-    get_sample_result,
     get_scenario_config,
     get_scenario_order,
 )
 
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+SUBAGENT_DATA_ROOT = PROJECT_ROOT / "data" / "subagents"
+
+
+def load_json_dict(file_path: Path) -> dict:
+    """Load a JSON object from disk and return an empty dict on failure."""
+    if not file_path.exists():
+        return {}
+
+    try:
+        with file_path.open("r", encoding="utf-8") as file:
+            payload = json.load(file)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    return payload if isinstance(payload, dict) else {}
+
+
+def load_current_results() -> dict:
+    """Load the latest integrated review result for the current Streamlit session."""
+    if not st.session_state.get("has_run", False):
+        return {}
+
+    orchestrator_response = st.session_state.get("orchestrator_response", {})
+    if isinstance(orchestrator_response, dict) and orchestrator_response:
+        return orchestrator_response
+
+    last_run = st.session_state.get("last_run", {})
+    run_id = last_run.get("run_id", "") if isinstance(last_run, dict) else ""
+    if run_id:
+        run_report = load_json_dict(SUBAGENT_DATA_ROOT / run_id / "final_report.json")
+        if run_report:
+            return run_report
+
+    return {}
+
+
+def parse_run_folder_name(folder_name: str) -> datetime | None:
+    """Parse a run folder name in YYYYMMDD_HHMMSS format."""
+    try:
+        return datetime.strptime(folder_name, "%Y%m%d_%H%M%S")
+    except ValueError:
+        return None
+
+
+def list_saved_run_folders() -> list[Path]:
+    """Return saved run folders sorted from newest to oldest."""
+    if not SUBAGENT_DATA_ROOT.exists():
+        return []
+
+    dated_folders: list[tuple[datetime, Path]] = []
+    for child in SUBAGENT_DATA_ROOT.iterdir():
+        if not child.is_dir():
+            continue
+
+        run_at = parse_run_folder_name(child.name)
+        if run_at is None:
+            continue
+
+        dated_folders.append((run_at, child))
+
+    dated_folders.sort(key=lambda item: item[0], reverse=True)
+    return [folder for _, folder in dated_folders]
+
+
+def get_latest_saved_score() -> tuple[int | None, datetime | None]:
+    """Read the most recent final report score from the saved subagent runs."""
+    for run_folder in list_saved_run_folders():
+        run_at = parse_run_folder_name(run_folder.name)
+        final_report = load_json_dict(run_folder / "final_report.json")
+        if not final_report:
+            continue
+
+        overall_score = final_report.get("overall_score")
+        if isinstance(overall_score, (int, float)):
+            return int(overall_score), run_at
+
+        return calculate_overall_score(final_report), run_at
+
+    return None, None
+
+
+def count_recent_run_requests(days: int = 7) -> int:
+    """Count saved run folders created within the recent N days, including today."""
+    if days <= 0 or not SUBAGENT_DATA_ROOT.exists():
+        return 0
+
+    today = date.today()
+    start_date = today - timedelta(days=days - 1)
+    count = 0
+
+    for run_folder in list_saved_run_folders():
+        run_at = parse_run_folder_name(run_folder.name)
+        if run_at is None:
+            continue
+
+        if start_date <= run_at.date() <= today:
+            count += 1
+
+    return count
+
+
 def render_main_view() -> None:
     """메인 화면 전체를 순서대로 렌더링합니다."""
     scenario_order = get_scenario_order()  # 통합 실행 시나리오 순서 [basic_quality, traceability, ui_match, coverage]
-    results = get_all_sample_results()  # 샘플 시나리오 결과
+    results = load_current_results()  # 현재 세션의 최신 통합 점검 결과
 
-    render_header(results, scenario_order) # 상단 제목과 요약 지표 렌더링
-    render_execute_section(scenario_order) # 통합 점검 실행 영역 렌더링
+    render_header(results, scenario_order)  # 상단 제목과 요약 지표 렌더링
+    render_execute_section(scenario_order)  # 통합 점검 실행 영역 렌더링
 
-    results_path = Path(__file__).resolve().parents[1] / "data" / "subagents" / "final_report.json"
-    with results_path.open("r", encoding="utf-8") as f:
-        report = json.load(f)
-    results = report
-    render_result_section(results, scenario_order) # 통합 점검 결과 영역 렌더링
+    if st.session_state.get("has_run", False):
+        results = load_current_results()
+        render_result_section(results, scenario_order)  # 통합 점검 결과 영역 렌더링
 
 
 def render_header(results: dict, scenario_order: list[str]) -> None:
     """서비스 제목과 상단 요약 지표를 보여줍니다."""
-    overall_score = calculate_overall_score(results)  # 전체 평균 점수
-    uploaded_count = len(st.session_state.last_run["files"])  # 최근 업로드 문서 수
-    required_count = len(get_all_required_files())  # 전체 필수 문서 수
-    score_delta = overall_score - 75  # 임시 기준점 대비 변화량
+    latest_score, latest_run_at = get_latest_saved_score()
+    fallback_score = calculate_overall_score(results) if results else None
+    recent_request_count = count_recent_run_requests(days=7)
+
+    score_value = f"{latest_score} pt" if latest_score is not None else (
+        f"{fallback_score} pt" if fallback_score is not None else "미실행"
+    )
+    score_delta = latest_run_at.strftime("%Y-%m-%d %H:%M:%S") if latest_run_at else None
 
     st.title("📃 프로젝트 산출물 통합 점검 서비스")
     st.caption("사용자는 산출물을 한 번 업로드하고, 점검 Agent가 각 시나리오를 순차적으로 실행해 품질 이슈와 보완 포인트를 정리합니다.")
@@ -55,17 +158,18 @@ def render_header(results: dict, scenario_order: list[str]) -> None:
     with col2:
         col2.metric(
             "최근 점수",
-            f"{overall_score}점",
-            f"{score_delta:+d}",
+            score_value,
+            score_delta,
             border=True,
         )
     with col3:
         col3.metric(
-            "최근 업로드 문서",
-            f"{uploaded_count}건",
-            f"필수 {required_count}종",
+            "최근 7일 요청",
+            f"{recent_request_count}건",
+            "오늘 포함",
             border=True,
         )
+
 
 def render_execute_section(scenario_order: list[str]) -> None:
     """파일 업로드와 통합 점검 실행 영역을 그립니다."""
@@ -108,22 +212,11 @@ def render_execute_section(scenario_order: list[str]) -> None:
                     "file": ui_file,
                 },
             }  # 업로드 문서 정보 맵
-            run_integrated_check(uploaded_documents, scenario_order) ## 통합 점검 실행
+            run_integrated_check(uploaded_documents, scenario_order)  # 통합 점검 실행
 
     with right:
-        # 우측은 통합 실행 흐름과 필요한 입력 정보를 안내합니다.
-        st.info(INTEGRATED_SERVICE["description"])
-
-        st.write("❕ 필수 문서")
-        for item in get_all_required_files():
-            st.write(f"- {item}")
-
-        st.divider()
-        st.write("⏸ 실행 순서")
-        for step, scenario_key in enumerate(scenario_order, start=1):
-            scenario = get_scenario_config(scenario_key)  # 현재 단계 시나리오 정보
-            st.write(f"{step}. {scenario['label']}")
-            st.caption(scenario["description"])
+        # 우측은 Agent Streaming 정보를 제공합니다.
+        st.info("Agent의 실시간 응답이 표시됩니다.")
 
 
 def run_integrated_check(uploaded_documents: dict[str, dict], scenario_order: list[str],) -> None:
@@ -131,8 +224,8 @@ def run_integrated_check(uploaded_documents: dict[str, dict], scenario_order: li
     uploaded_file_names = [
         document["file"].name for document in uploaded_documents.values() if document["file"] is not None
     ]  # 실제 업로드 파일 이름 목록
-    ## 업로드 문서 누락 체크
-    if len(uploaded_file_names) < 3 :
+    # 업로드 문서 누락 체크
+    if len(uploaded_file_names) < 3:
         st.warning("필수 문서를 모두 업로드해야 합니다.")
         return
 
@@ -144,10 +237,10 @@ def run_integrated_check(uploaded_documents: dict[str, dict], scenario_order: li
 
     # 백엔드 파이프라인 실행
     backend_result = run_backend_pipeline(
-        uploaded_documents=uploaded_documents, # 업로드한 파일 dict
-        user_request=st.session_state.extra_request.strip(), # 추가 요청 사항
-        scenario_order=scenario_order, # 시나리오 순서
-    )  
+        uploaded_documents=uploaded_documents,  # 업로드한 파일 dict
+        user_request=st.session_state.extra_request.strip(),  # 추가 요청 사항
+        scenario_order=scenario_order,  # 시나리오 순서
+    )
 
     progress_bar.progress(
         1 / total_steps,
@@ -192,7 +285,7 @@ def render_result_section(results: dict, scenario_order: list[str]) -> None:
     """통합 결과와 시나리오별 상세 결과를 출력합니다."""
     st.divider()
     st.subheader("통합 점검 결과")
-    
+
     tab_summary, tab_scenarios = st.tabs(
         ["통합 요약", "시나리오별 결과"]
     )
@@ -324,15 +417,30 @@ def render_scenario_results(results: dict, scenario_order: list[str]) -> None:
                     st.info("개선 권고가 없습니다.")
 
 
-
-
 def calculate_overall_score(results: dict) -> int:
     """전체 시나리오 점수 평균을 정수로 계산합니다."""
-    
-    total_score = sum(result["score"] for result in results.values())  # 전체 점수 합계
-    return round(total_score / len(results))
+    if not isinstance(results, dict) or not results:
+        return 0
 
+    final_report = results.get("final_report", results)
+    if isinstance(final_report, dict):
+        overall_score = final_report.get("overall_score")
+        if isinstance(overall_score, int):
+            return overall_score
 
+        scenario_results = final_report.get("scenario_results", [])
+        if isinstance(scenario_results, list):
+            scores = [
+                scenario.get("score")
+                for scenario in scenario_results
+                if isinstance(scenario, dict) and isinstance(scenario.get("score"), (int, float))
+            ]
+            if scores:
+                return round(sum(scores) / len(scores))
 
-
-
+    scores = [
+        result.get("score")
+        for result in results.values()
+        if isinstance(result, dict) and isinstance(result.get("score"), (int, float))
+    ]
+    return round(sum(scores) / len(scores)) if scores else 0

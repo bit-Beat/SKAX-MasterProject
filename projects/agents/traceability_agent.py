@@ -14,6 +14,7 @@ def build_traceability_agent_spec(toolset: Dict[str, Any]) -> Dict[str, Any]:
         "description": "SC-002 구조 정합성 점검 Agent. 요구사항-기능-UI 간 ID 기반 매핑을 검증한다.",
         "system_prompt": (
             "너는 구조 정합성 점검 Agent다. SC-002/traceability 시나리오만 담당한다. "
+            "출력 시 시나리오 키는 반드시 traceability로 표기하라."
             "요구사항, 기능, UI 산출물 간 ID 연결성과 매핑 누락을 우선 검증하라. "
             "UI 의미 해석보다 ID 연결성을 우선하고, 추상적 품질 평가는 수행하지 마라. "
             "반드시 run_traceability_review 결과에 근거해 findings, warnings, score, recommendations를 정리하라."

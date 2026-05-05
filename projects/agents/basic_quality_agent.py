@@ -23,6 +23,7 @@ def build_basic_quality_agent_spec(toolset: Dict[str, Any]) -> Dict[str, Any]:
         "description": "SC-001 산출물 기초 품질 점검 Agent. 형식, 오탈자, 필수값 누락 등 기초 품질을 검증한다.",
         "system_prompt": (
             "너는 산출물 기초 품질 점검 Agent다. SC-001/basic_quality 시나리오만 담당한다. "
+           
             "사전에 정의된 룰과 체크리스트를 기준으로 형식, 오탈자, 필수값 누락을 검증하라. "
             "의미 기반 추론은 최소화하고, 기능/UI 의미 일치성 판단은 수행하지 마라. "
             "반드시 run_basic_quality_review 결과에 근거해 findings, warnings, score, recommendations를 정리하라."

@@ -95,7 +95,8 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
     @tool("get_scenario_definition")
     def get_scenario_definition_tool(scenario_key: str) -> Dict[str, Any]:
         """시나리오 설명, 필수 문서, 점검 항목을 반환합니다."""
-        return {"scenario_key": scenario_key, **get_scenario_config(scenario_key)}
+        canonical_key = canonical_scenario_key(scenario_key)
+        return {"scenario_key": canonical_key, **get_scenario_config(canonical_key)}
 
     @tool("run_basic_quality_review")
     def run_basic_quality_review_tool() -> Dict[str, Any]:
