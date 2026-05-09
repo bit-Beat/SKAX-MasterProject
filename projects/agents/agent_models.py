@@ -2,21 +2,72 @@
 
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+
+def _limit_list(value, limit: int):
+    """Trim model-produced lists before Pydantic max_length validation."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        return value
+    if len(value) <= limit:
+        return value
+    return [*value[: limit - 1], f"... 외 {len(value) - limit + 1}건 생략"]
 
 
 class SubagentReport(BaseModel):
     """서브에이전트가 반환하는 최소 구조."""
 
     scenario_key: str = Field(description="현재 시나리오 키")
-    summary: str = Field(description="서브에이전트 요약")
+    summary: str = Field(description="서브에이전트 요약", max_length=800)
     score: Optional[int] = Field(default=None, description="0~100 점수")
-    findings: List[str] = Field(default_factory=list, description="핵심 이슈 목록")
-    warnings: List[str] = Field(default_factory=list, description="주의사항 목록")
-    recommendations: List[str] = Field(default_factory=list, description="권장 조치 목록")
+    findings: List[str] = Field(default_factory=list, max_length=8, description="핵심 이슈 목록")
+    warnings: List[str] = Field(default_factory=list, max_length=8, description="주의사항 목록")
+    recommendations: List[str] = Field(default_factory=list, max_length=8, description="권장 조치 목록")
     artifact_path: Optional[str] = Field(default=None, description="저장 경로")
+    corrected_document_paths: List[str] = Field(default_factory=list, description="문서별 보완본 JSON 저장 경로 목록")
+
+
+    @field_validator("findings", "warnings", "recommendations", mode="before")
+    @classmethod
+    def trim_issue_lists(cls, value):
+        return _limit_list(value, 8)
+
+    @field_validator("corrected_document_paths", mode="before")
+    @classmethod
+    def trim_corrected_paths(cls, value):
+        return _limit_list(value, 3)
+
+
+class SelfQualityReport(BaseModel):
+    """자가 교정 점검 Agent가 반환하는 구조."""
+
+    scenario_key: str = Field(description="검증 대상 시나리오 키")
+    target_agent_name: str = Field(description="검증 대상 원본 서브에이전트 이름")
+    summary: str = Field(description="자가 교정 점검 요약", max_length=800)
+    score: int = Field(description="교정 품질 점수", ge=0, le=100)
+    threshold: int = Field(default=85, description="재실행 판단 기준 점수")
+    rerun_required: bool = Field(description="기준 미달로 원본 서브에이전트 재실행이 필요한지 여부")
+    findings: List[str] = Field(default_factory=list, max_length=8, description="교정 미흡 또는 실패 항목")
+    warnings: List[str] = Field(default_factory=list, max_length=8, description="주의가 필요한 항목")
+    correction_guidance: List[str] = Field(default_factory=list, max_length=8, description="원본 서브에이전트 재실행 시 전달할 구체 지침")
+    checked_document_paths: List[str] = Field(default_factory=list, max_length=3, description="검증한 문서별 보완본 JSON 경로")
+    document_scores: Dict[str, int] = Field(default_factory=dict, description="문서별 교정 품질 점수")
+    artifact_path: Optional[str] = Field(default=None, description="자가 교정 점검 결과 저장 경로")
+
+
+    @field_validator("findings", "warnings", "correction_guidance", mode="before")
+    @classmethod
+    def trim_issue_lists(cls, value):
+        return _limit_list(value, 8)
+
+    @field_validator("checked_document_paths", mode="before")
+    @classmethod
+    def trim_checked_paths(cls, value):
+        return _limit_list(value, 3)
 
 
 class ScenarioReport(BaseModel):
@@ -26,19 +77,35 @@ class ScenarioReport(BaseModel):
     scenario_label: str = Field(description="표시용 시나리오 이름")
     status: str = Field(description="통과, 검토 권장, 보완 필요 중 하나")
     score: int = Field(description="시나리오 점수", ge=0, le=100)
-    summary: str = Field(description="시나리오 요약")
-    findings: List[str] = Field(default_factory=list, description="주요 이슈")
-    warnings: List[str] = Field(default_factory=list, description="주의사항")
-    recommendations: List[str] = Field(default_factory=list, description="권장 조치")
+    summary: str = Field(description="시나리오 요약", max_length=800)
+    findings: List[str] = Field(default_factory=list, max_length=8, description="주요 이슈")
+    warnings: List[str] = Field(default_factory=list, max_length=8, description="주의사항")
+    recommendations: List[str] = Field(default_factory=list, max_length=8, description="권장 조치")
+
+
+    @field_validator("findings", "warnings", "recommendations", mode="before")
+    @classmethod
+    def trim_issue_lists(cls, value):
+        return _limit_list(value, 8)
 
 
 class FinalReviewReport(BaseModel):
     """메인 DeepAgent의 최종 구조화 응답."""
 
     run_id: str = Field(description="실행 식별자")
-    summary: str = Field(description="전체 점검 요약")
+    summary: str = Field(description="전체 점검 요약", max_length=1000)
     overall_score: int = Field(description="통합 점수", ge=0, le=100)
     blocked_scenarios: List[str] = Field(default_factory=list, description="보완 필요 시나리오")
     scenario_order: List[str] = Field(default_factory=list, description="실행 시나리오 순서")
-    scenario_results: List[ScenarioReport] = Field(default_factory=list, description="시나리오별 결과")
-    priority_actions: List[str] = Field(default_factory=list, description="우선순위 액션")
+    scenario_results: List[ScenarioReport] = Field(default_factory=list, max_length=4, description="시나리오별 결과")
+    priority_actions: List[str] = Field(default_factory=list, max_length=8, description="우선순위 액션")
+
+    @field_validator("scenario_results", mode="before")
+    @classmethod
+    def trim_scenario_results(cls, value):
+        return _limit_list(value, 4)
+
+    @field_validator("priority_actions", mode="before")
+    @classmethod
+    def trim_priority_actions(cls, value):
+        return _limit_list(value, 8)

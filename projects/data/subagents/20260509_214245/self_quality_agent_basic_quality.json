@@ -1,0 +1,33 @@
+{
+  "scenario_key": "basic_quality",
+  "target_agent_name": "basic-quality-agent",
+  "summary": "basic-quality-agent 문서별 보완본 3종을 자가 점검했습니다. 교정 품질 점수는 74점이며 기준점수 85점 미만으로 재실행이 필요합니다.",
+  "score": 74,
+  "threshold": 85,
+  "rerun_required": true,
+  "findings": [
+    "보완본 재점검 잔여 오류: [REQ-OWNER-001] 요구사항 정의서 18행: 요청자(요구사항 Owner)가 누락되었습니다.",
+    "보완본 재점검 잔여 오류: [FUNC-UI-ID-001] 기능 정의서 24행: 화면ID 'UI-D00Z'는 UI-001 형식이어야 합니다.",
+    "보완본 재점검 잔여 오류: [FUNC-ID-001] 기능 정의서 27행: 기능ID 'F-025'는 REQ-001-F01 형식이어야 합니다.",
+    "보완본 재점검 잔여 오류: [UI-ID-001] UI 설계서 21행: 화면ID 'UI-D00Z'는 UI-001 형식이어야 합니다."
+  ],
+  "warnings": [],
+  "correction_guidance": [
+    "basic-quality-agent 재실행 지침: [REQ-OWNER-001] 요구사항 정의서 18행: 요청자(요구사항 Owner)가 누락되었습니다. 이 항목이 보완본에 남지 않도록 관련 문서/행/컬럼을 수정하고 문서별 output JSON 3개를 다시 생성하세요.",
+    "basic-quality-agent 재실행 지침: [FUNC-UI-ID-001] 기능 정의서 24행: 화면ID 'UI-D00Z'는 UI-001 형식이어야 합니다. 이 항목이 보완본에 남지 않도록 관련 문서/행/컬럼을 수정하고 문서별 output JSON 3개를 다시 생성하세요.",
+    "basic-quality-agent 재실행 지침: [FUNC-ID-001] 기능 정의서 27행: 기능ID 'F-025'는 REQ-001-F01 형식이어야 합니다. 이 항목이 보완본에 남지 않도록 관련 문서/행/컬럼을 수정하고 문서별 output JSON 3개를 다시 생성하세요.",
+    "basic-quality-agent 재실행 지침: [UI-ID-001] UI 설계서 21행: 화면ID 'UI-D00Z'는 UI-001 형식이어야 합니다. 이 항목이 보완본에 남지 않도록 관련 문서/행/컬럼을 수정하고 문서별 output JSON 3개를 다시 생성하세요."
+  ],
+  "checked_document_paths": [
+    "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260509_214245\\basic_quality\\basic_quality_agent_output_requirement_definition.json",
+    "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260509_214245\\basic_quality\\basic_quality_agent_output_feature_definition.json",
+    "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260509_214245\\basic_quality\\basic_quality_agent_output_ui_design.json"
+  ],
+  "document_scores": {
+    "requirement_definition": 100,
+    "feature_definition": 100,
+    "ui_design": 100
+  },
+  "artifact_path": null,
+  "agent_name": "self_quality_agent"
+}

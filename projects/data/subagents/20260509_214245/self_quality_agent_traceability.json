@@ -1,0 +1,28 @@
+{
+  "scenario_key": "traceability",
+  "target_agent_name": "traceability-agent",
+  "summary": "traceability-agent 문서별 보완본 3종을 자가 점검했습니다. 교정 품질 점수는 84점이며 기준점수 85점 미만으로 재실행이 필요합니다.",
+  "score": 84,
+  "threshold": 85,
+  "rerun_required": true,
+  "findings": [
+    "보완본 재점검 잔여 오류: 기능 정의서의 화면ID가 UI 설계서와 연결되지 않습니다. 예: UI-009, UI-015, UI-023"
+  ],
+  "warnings": [
+    "보완본 재점검 잔여 경고: 요구사항-기능-UI 연결이 일부 구간에서 끊겨 있을 수 있습니다."
+  ],
+  "correction_guidance": [
+    "traceability-agent 재실행 지침: 기능 정의서의 화면ID가 UI 설계서와 연결되지 않습니다. 예: UI-009, UI-015, UI-023 이 항목이 보완본에 남지 않도록 관련 문서/행/컬럼을 수정하고 문서별 output JSON 3개를 다시 생성하세요."
+  ],
+  "checked_document_paths": [
+    "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260509_214245\\traceability\\traceability_agent_output_requirement_definition.json",
+    "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260509_214245\\traceability\\traceability_agent_output_feature_definition.json",
+    "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260509_214245\\traceability\\traceability_agent_output_ui_design.json"
+  ],
+  "document_scores": {
+    "requirement_definition": 100,
+    "feature_definition": 100,
+    "ui_design": 100
+  },
+  "agent_name": "self_quality_agent"
+}

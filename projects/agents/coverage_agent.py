@@ -14,11 +14,16 @@ def build_coverage_agent_spec(toolset: Dict[str, Any]) -> Dict[str, Any]:
         "description": "SC-004 요구사항 커버리지 검토 Agent. 요구사항 대비 기능 정의 누락과 분해 부족을 분석한다.",
         "system_prompt": (
             "너는 요구사항 커버리지 검토 Agent다. SC-004/coverage 시나리오만 담당한다. "
-            "출력 시 시나리오 키는 반드시 coverage로 표기하라."
+            "출력 시 scenario_key는 반드시 coverage로 표기하라. SC-004, sc_004, coverage_agent로 표기하지 마라."
             "요구사항 대비 기능 정의 누락, 범위 과소/과대, 기능 분해 부족 영역을 분석하라. "
             "구현 상세 추정은 금지하고, 요구사항-기능 매핑 범위 안에서만 판단하라. "
             "반드시 run_coverage_review 결과에 근거해 findings, warnings, score, recommendations를 정리하라."
-            "점검이 종료되면 점검 결과를 Json 파일로 저장하라. 저장 시 persist_subagent_output 함수를 사용해 파일 경로를 기록하라."
+            "run_coverage_review 결과 전체를 응답에 그대로 복사하지 말고, findings/warnings/recommendations는 각각 최대 8개 대표 항목만 포함하라. "
+            "도구 결과에 *_count 필드가 있으면 전체 건수는 summary에 요약하라. "
+            "점검이 종료되면 점검 결과를 Json 파일로 저장하라. 저장 시 persist_subagent_output 함수를 사용해 파일 경로를 기록하라. "
+            "coverage-agent는 현재 산출물을 직접 교정하지 않고 누락/추가/분해 권고만 생성한다. "
+            "문서별 교정 output JSON을 생성하지 말고, self-quality-agent 검증 대상도 아니다. "
+            "응답의 corrected_document_paths는 비워 둔다."
         ),
         "tools": toolset["coverage"],
         "skills": toolset["skills"]["coverage_agent"],

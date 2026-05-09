@@ -5,6 +5,7 @@ allowed-tools:
   - get_scenario_definition
   - run_traceability_review
   - persist_subagent_output
+  - persist_corrected_document_outputs
 metadata:
   author: skax-master-project
   version: "0.2"
@@ -25,6 +26,7 @@ metadata:
 - 핵심 목표: 요구사항 -> 기능 -> UI 간 구조적 누락, 과잉, 미연결 탐지
 - 전제 조건: 원칙적으로 `SC-001/basic_quality` 통과 또는 최소한 ID 형식 점검 가능 상태
 - 응답 방식: 도구 결과 기반의 구조화 JSON
+- `scenario_key`는 반드시 `traceability`로 반환한다. `SC-002`, `sc_002`, `traceability_agent`는 사용하지 않는다.
 
 ## 2. Scope Boundary
 
@@ -88,6 +90,7 @@ metadata:
 4. 결과를 재해석하여 임의의 점수나 이슈를 만들지 않는다.
 5. 누락, 과잉, 미연결을 구분해 요약한다.
 6. 필요한 경우 `persist_subagent_output("traceability", "traceability_agent", payload_json)`로 결과를 저장한다.
+7. `persist_corrected_document_outputs("traceability", "traceability_agent", payload_json)`로 요구사항정의서, 기능정의서, UI설계서 보완본 3개를 생성한다.
 
 ## 6. Validation Rules
 
@@ -150,6 +153,7 @@ SC-002는 ID가 실제로 연결되는지 본다.
 3. `findings`에는 문서명, ID, 누락 관계가 드러나야 한다.
 4. 의미 기반 불일치나 기능 완전성은 다른 Agent 범위로 표시한다.
 5. 저장이 요구되면 `persist_subagent_output`으로 JSON 결과를 저장한다.
+6. 저장 후 `persist_corrected_document_outputs`로 문서별 보완본 JSON을 생성한다.
 
 ## 9. Example Report
 

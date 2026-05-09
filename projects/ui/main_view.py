@@ -13,13 +13,18 @@ from ui.service_data import (
     INTEGRATED_SERVICE,
     get_all_required_files,
     get_result_view_label,
-    get_scenario_config,
     get_scenario_order,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SUBAGENT_DATA_ROOT = PROJECT_ROOT / "data" / "subagents"
 STREAM_LOG_LIMIT = 12
+DEFAULT_AGENT_STREAM_STATE = {
+    "kind": "idle",
+    "message": "통합 점검을 실행하면 Main Agent와 서브에이전트 진행 상황이 여기에 표시됩니다.",
+    "progress": 0.0,
+    "logs": [],
+}
 
 
 def load_json_dict(file_path: Path) -> dict:
@@ -129,30 +134,110 @@ def clamp_stream_progress(value: object) -> float:
     return max(0.0, min(progress, 1.0))
 
 
+def get_agent_stream_state() -> dict:
+    """Return the persisted right-panel Agent progress state."""
+    state = st.session_state.get("agent_stream_state")
+    if not isinstance(state, dict):
+        state = DEFAULT_AGENT_STREAM_STATE.copy()
+        state["logs"] = []
+        st.session_state.agent_stream_state = state
+    return state
+
+
+def reset_agent_stream_state() -> None:
+    """Clear the right-panel Agent progress only when a new run starts."""
+    state = DEFAULT_AGENT_STREAM_STATE.copy()
+    state["logs"] = []
+    st.session_state.agent_stream_state = state
+
+
+def save_agent_stream_event(event: dict[str, object]) -> dict:
+    """Persist one Agent stream event so reruns keep the latest progress visible."""
+    state = get_agent_stream_state()
+    message = str(event.get("message") or "Agent가 작업을 진행하고 있습니다.")
+    kind = str(event.get("kind") or "status")
+    previous_progress = clamp_stream_progress(state.get("progress"))
+    progress = max(previous_progress, clamp_stream_progress(event.get("progress")))
+    logs = state.get("logs", [])
+    if not isinstance(logs, list):
+        logs = []
+
+    logs.append(message)
+    del logs[:-STREAM_LOG_LIMIT]
+
+    state.update(
+        {
+            "kind": kind,
+            "message": message,
+            "progress": progress,
+            "logs": logs,
+        }
+    )
+    st.session_state.agent_stream_state = state
+    return state
+
+
+def render_agent_stream_state(
+    status_placeholder: st.delta_generator.DeltaGenerator,
+    progress_bar: st.delta_generator.DeltaGenerator,
+    log_placeholder: st.delta_generator.DeltaGenerator,
+) -> None:
+    """Render the persisted Agent progress state in the right panel."""
+    state = get_agent_stream_state()
+    message = str(state.get("message") or DEFAULT_AGENT_STREAM_STATE["message"])
+    kind = str(state.get("kind") or "status")
+    progress = clamp_stream_progress(state.get("progress"))
+    logs = state.get("logs", [])
+    if not isinstance(logs, list):
+        logs = []
+
+    progress_bar.progress(progress, text=message)
+    if kind == "success":
+        status_placeholder.success(message)
+    elif kind == "error":
+        status_placeholder.error(message)
+    elif kind == "idle":
+        status_placeholder.info(message)
+    else:
+        status_placeholder.info(message)
+
+    if logs:
+        log_placeholder.markdown("\n".join(f"- {line}" for line in logs))
+    else:
+        log_placeholder.caption("아직 실행된 로그가 없습니다.")
+
+
+def render_completion_dialog() -> None:
+    """Show a one-shot Streamlit modal after an integrated check completes."""
+    if not st.session_state.get("show_completion_modal", False):
+        return
+
+    st.session_state.show_completion_modal = False
+    notice = st.session_state.get("post_run_notice", "통합 점검이 완료되었습니다.")
+    last_run = st.session_state.get("last_run", {})
+    run_id = last_run.get("run_id", "") if isinstance(last_run, dict) else ""
+
+    @st.dialog("통합 점검 완료", width="medium", icon="✔️")
+    def _completion_dialog() -> None:
+        st.write(notice)
+        if run_id:
+            st.caption(f"실행 ID: {run_id}")
+        if st.button("확인", key="completion_dialog_confirm"):
+            st.rerun()
+
+    _completion_dialog()
+
+
 def build_stream_callback(
     status_placeholder: st.delta_generator.DeltaGenerator,
     progress_bar: st.delta_generator.DeltaGenerator,
     log_placeholder: st.delta_generator.DeltaGenerator,
 ) -> Callable[[dict[str, object]], None]:
     """Build a UI callback that renders translated Agent events in the right panel."""
-    recent_logs: list[str] = []
 
     def handle_stream_event(event: dict[str, object]) -> None:
-        message = str(event.get("message") or "Agent가 작업을 진행하고 있습니다.")
-        kind = str(event.get("kind") or "status")
-        progress = clamp_stream_progress(event.get("progress"))
-
-        progress_bar.progress(progress, text=message)
-        if kind == "success":
-            status_placeholder.success(message)
-        elif kind == "error":
-            status_placeholder.error(message)
-        else:
-            status_placeholder.info(message)
-
-        recent_logs.append(message)
-        del recent_logs[:-STREAM_LOG_LIMIT]
-        log_placeholder.markdown("\n".join(f"- {line}" for line in recent_logs))
+        save_agent_stream_event(event)
+        render_agent_stream_state(status_placeholder, progress_bar, log_placeholder)
 
     return handle_stream_event
 
@@ -213,10 +298,7 @@ def render_execute_section(scenario_order: list[str]) -> None:
     """파일 업로드와 통합 점검 실행 영역을 그립니다."""
     st.divider()
     st.subheader("통합 점검 실행")
-
-    completion_notice = st.session_state.pop("post_run_notice", "")
-    if completion_notice:
-        st.success(completion_notice)
+    render_completion_dialog()
 
     left, right = st.columns([1.35, 1.0])
 
@@ -224,10 +306,9 @@ def render_execute_section(scenario_order: list[str]) -> None:
         # 우측은 통합 실행 흐름과 Agent 진행 상황을 안내합니다.
         st.write("🛰 Agent 진행 상황")
         stream_status = st.empty()
-        stream_status.info("통합 점검을 실행하면 Main Agent와 서브에이전트 진행 상황이 여기에 표시됩니다.")
-        stream_progress = st.progress(0, text="실행 대기 중입니다.")
+        stream_progress = st.progress(0, text=DEFAULT_AGENT_STREAM_STATE["message"])
         stream_log = st.empty()
-        stream_log.caption("아직 실행된 로그가 없습니다.")
+        render_agent_stream_state(stream_status, stream_progress, stream_log)
         stream_callback = build_stream_callback(stream_status, stream_progress, stream_log)
 
     with left:
@@ -250,31 +331,81 @@ def render_execute_section(scenario_order: list[str]) -> None:
         st.text_area("추가 요청", key="extra_request", height=120)
 
         if st.button("통합 점검 실행", type="primary", use_container_width=True):
-            uploaded_documents = {
-                "requirement_definition": {
-                    "label": "요구사항 정의서",
-                    "file": requirement_file,
-                },
-                "feature_definition": {
-                    "label": "기능 정의서",
-                    "file": feature_file,
-                },
-                "ui_design": {
-                    "label": "UI 설계서",
-                    "file": ui_file,
-                },
-            }  # 업로드 문서 정보 맵
-            run_integrated_check(
-                uploaded_documents,
-                scenario_order,
-                stream_callback=stream_callback,
-            )  # 통합 점검 실행
+            reset_agent_stream_state()
+            st.session_state.post_run_notice = ""
+            st.session_state.show_completion_modal = False
+            st.session_state.run_integrated_check_requested = True
+            st.rerun()
+
+        uploaded_documents = {
+            "requirement_definition": {
+                "label": "요구사항 정의서",
+                "file": requirement_file,
+            },
+            "feature_definition": {
+                "label": "기능 정의서",
+                "file": feature_file,
+            },
+            "ui_design": {
+                "label": "UI 설계서",
+                "file": ui_file,
+            },
+        }  # 업로드 문서 정보 맵
+
+    result_loading_placeholder = st.empty()
+    if st.session_state.get("run_integrated_check_requested", False):
+        st.session_state.run_integrated_check_requested = False
+        run_integrated_check(
+            uploaded_documents,
+            scenario_order,
+            stream_callback=stream_callback,
+            result_loading_placeholder=result_loading_placeholder,
+        )  # 통합 점검 실행
+
+
+def render_result_loading_section() -> None:
+    """Show the result section loading state while the integrated result is being prepared."""
+    st.divider()
+    st.subheader("통합 점검 결과")
+    st.markdown(
+        """
+        <style>
+        .integrated-result-loading {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1rem;
+            border: 1px solid rgba(49, 51, 63, 0.2);
+            border-radius: 0.5rem;
+            background: rgba(240, 242, 246, 0.45);
+        }
+        .integrated-result-loading__spinner {
+            width: 1.25rem;
+            height: 1.25rem;
+            border: 0.18rem solid rgba(49, 51, 63, 0.18);
+            border-top-color: rgb(255, 75, 75);
+            border-radius: 50%;
+            animation: integrated-result-spin 0.8s linear infinite;
+            flex: 0 0 auto;
+        }
+        @keyframes integrated-result-spin {
+            to { transform: rotate(360deg); }
+        }
+        </style>
+        <div class="integrated-result-loading">
+            <div class="integrated-result-loading__spinner"></div>
+            <div>통합 점검 결과가 로드중입니다. 잠시만 기다려 주세요.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def run_integrated_check(
     uploaded_documents: dict[str, dict],
     scenario_order: list[str],
     stream_callback: Callable[[dict[str, object]], None] | None = None,
+    result_loading_placeholder: st.delta_generator.DeltaGenerator | None = None,
 ) -> None:
     """업로드 파일을 JSON으로 정리한 뒤 통합 점검 상태를 갱신합니다."""
     uploaded_file_names = [
@@ -285,27 +416,28 @@ def run_integrated_check(
         st.warning("필수 문서를 모두 업로드해야 합니다.")
         return
 
-    status_text = st.empty()  # 단계 상태 메시지 영역
-    progress_bar = st.progress(0, text="통합 점검 준비 중입니다.")  # 실행 진행률 표시
-    status_text.info("업로드 문서와 요청 사항을 정리하고 있습니다.")
-    progress_bar.progress(0.05, text="업로드 문서와 요청 사항을 정리하고 있습니다.")
+    result_loading_started = False
+
+    def show_result_loading_if_ready(event: dict[str, object], message: str, kind: str) -> None:
+        nonlocal result_loading_started
+        if result_loading_started or result_loading_placeholder is None or kind != "success":
+            return
+
+        progress = clamp_stream_progress(event.get("progress"))
+        if progress < 1.0 or message != "Main Agent가 최종 보고서를 정리했습니다.":
+            return
+
+        result_loading_started = True
+        with result_loading_placeholder.container():
+            render_result_loading_section()
 
     def handle_stream_event(event: dict[str, object]) -> None:
         message = str(event.get("message") or "Agent가 작업을 진행하고 있습니다.")
         kind = str(event.get("kind") or "status")
-        raw_progress = clamp_stream_progress(event.get("progress"))
-        ui_progress = min(0.15 + (raw_progress * 0.85), 1.0 if kind == "success" else 0.98)
-
-        progress_bar.progress(ui_progress, text=message)
-        if kind == "success":
-            status_text.success(message)
-        elif kind == "error":
-            status_text.error(message)
-        else:
-            status_text.info(message)
 
         if stream_callback is not None:
             stream_callback(event)
+        show_result_loading_if_ready(event, message, kind)
 
     # 백엔드 파이프라인 실행
     backend_result = run_backend_pipeline(
@@ -315,8 +447,14 @@ def run_integrated_check(
         stream_callback=handle_stream_event,
     )
 
-    progress_bar.progress(1.0, text="통합 점검 결과를 정리했습니다.")
-    status_text.success("문서 JSON 생성과 통합 점검을 모두 완료했습니다.")
+    if stream_callback is not None:
+        stream_callback(
+            {
+                "kind": "success",
+                "message": "통합 점검이 완료되었습니다. Agent 실행 결과를 확인할 수 있습니다.",
+                "progress": 1.0,
+            }
+        )
 
     st.session_state.has_run = True  # 실행 완료 여부 저장
     st.session_state.prepared_payload = backend_result["agent_request"]  # 생성된 JSON payload 저장
@@ -331,7 +469,8 @@ def run_integrated_check(
         "run_id": backend_result["run_id"],  # 최근 실행 ID
     }
 
-    st.session_state.post_run_notice = "통합 점검 결과를 갱신했습니다."
+    st.session_state.post_run_notice = "통합 점검이 완료되었습니다. 결과가 갱신되었습니다."
+    st.session_state.show_completion_modal = True
     st.rerun()
 
 

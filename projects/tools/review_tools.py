@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -101,22 +102,22 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
     @tool("run_basic_quality_review")
     def run_basic_quality_review_tool() -> Dict[str, Any]:
         """기초 품질 점검을 수행합니다."""
-        return review_basic_quality(documents)
+        return compact_review_result(review_basic_quality(documents))
 
     @tool("run_traceability_review")
     def run_traceability_review_tool() -> Dict[str, Any]:
         """요구사항-기능-UI 연결 구조를 점검합니다."""
-        return review_traceability(documents)
+        return compact_review_result(review_traceability(documents))
 
     @tool("run_ui_match_review")
     def run_ui_match_review_tool() -> Dict[str, Any]:
         """기능과 UI 간 일치성을 점검합니다."""
-        return review_ui_match(documents)
+        return compact_review_result(review_ui_match(documents))
 
     @tool("run_coverage_review")
     def run_coverage_review_tool() -> Dict[str, Any]:
         """요구사항 대비 기능 완전성을 점검합니다."""
-        return review_coverage(documents)
+        return compact_review_result(review_coverage(documents))
 
     @tool("build_improvement_actions")
     def build_improvement_actions_tool(
@@ -131,19 +132,62 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
     def persist_subagent_output_tool(scenario_key: str, agent_name: str, payload_json: str) -> str:
         """서브에이전트 결과를 JSON 파일로 저장합니다."""
         payload = parse_json(payload_json)
+        canonical_scenario = canonical_scenario_key(scenario_key) or canonical_scenario_key(agent_name)
+        payload = normalize_subagent_output_payload(documents, canonical_scenario, agent_name, payload)
         if isinstance(payload, dict):
-            payload.setdefault("agent_name", sanitize_name(agent_name))
-        file_path = DATA_ROOT / run_id / canonical_subagent_file_name(scenario_key, agent_name)
+            payload["scenario_key"] = canonical_scenario
+        file_path = DATA_ROOT / run_id / canonical_subagent_file_name(canonical_scenario, agent_name)
         if file_path.exists():
             try:
                 existing_payload = json.loads(file_path.read_text(encoding="utf-8"))
             except (OSError, json.JSONDecodeError):
                 existing_payload = {}
             if isinstance(existing_payload, dict) and is_preferred_subagent_payload(payload, existing_payload):
+                corrected_paths = maybe_persist_corrected_documents(run_id, documents, canonical_scenario, agent_name, payload)
+                if corrected_paths:
+                    payload["corrected_document_paths"] = corrected_paths
+                else:
+                    payload.pop("corrected_document_paths", None)
                 save_json(file_path, payload)
             return str(file_path)
+        corrected_paths = maybe_persist_corrected_documents(run_id, documents, canonical_scenario, agent_name, payload)
+        if corrected_paths:
+            payload["corrected_document_paths"] = corrected_paths
+        else:
+            payload.pop("corrected_document_paths", None)
         save_json(file_path, payload)
         return str(file_path)
+
+    @tool("persist_corrected_document_outputs")
+    def persist_corrected_document_outputs_tool(
+        scenario_key: str,
+        agent_name: str,
+        review_payload_json: str,
+    ) -> Dict[str, Any]:
+        """점검 결과를 반영한 문서별 보완본 JSON 3개를 저장합니다."""
+        review_payload = parse_json(review_payload_json)
+        if canonical_scenario_key(scenario_key) == "coverage":
+            return {
+                "run_id": run_id,
+                "scenario_key": "coverage",
+                "agent_name": sanitize_name(agent_name),
+                "saved_paths": [],
+                "skipped": True,
+                "reason": "coverage-agent는 현재 산출물 기준 보완 권고를 생성하는 역할이므로 문서별 교정 output을 생성하지 않습니다.",
+            }
+        saved_paths = persist_corrected_documents(
+            run_id,
+            documents,
+            scenario_key,
+            agent_name,
+            review_payload,
+        )
+        return {
+            "run_id": run_id,
+            "scenario_key": canonical_scenario_key(scenario_key),
+            "agent_name": sanitize_name(agent_name),
+            "saved_paths": saved_paths,
+        }
 
     @tool("get_subagent_outputs")
     def get_subagent_outputs_tool() -> Dict[str, Any]:
@@ -174,12 +218,35 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
                     loaded_by_scenario[scenario_key] = payload
 
         outputs.extend(
-            loaded_by_scenario[key]
+            compact_subagent_output_for_report(loaded_by_scenario[key])
             for key in ["basic_quality", "traceability", "ui_match", "coverage"]
             if key in loaded_by_scenario
         )
 
         return {"run_id": run_id, "outputs": outputs}
+
+    @tool("get_corrected_document_outputs")
+    def get_corrected_document_outputs_tool(scenario_key: str) -> Dict[str, Any]:
+        """시나리오 SubAgent가 생성한 문서별 보완본 JSON과 원 점검 결과를 반환합니다."""
+        scenario = canonical_scenario_key(scenario_key)
+        return get_corrected_document_outputs(run_id, scenario)
+
+    @tool("run_self_quality_review")
+    def run_self_quality_review_tool(scenario_key: str, threshold: int = 85) -> Dict[str, Any]:
+        """문서별 보완본이 원 점검 결과를 제대로 교정했는지 검증합니다."""
+        return run_self_quality_review(run_id, canonical_scenario_key(scenario_key), threshold)
+
+    @tool("persist_self_quality_output")
+    def persist_self_quality_output_tool(scenario_key: str, payload_json: str) -> str:
+        """자가 교정 점검 결과를 JSON 파일로 저장합니다."""
+        scenario = canonical_scenario_key(scenario_key)
+        payload = parse_json(payload_json)
+        if isinstance(payload, dict):
+            payload.setdefault("scenario_key", scenario)
+            payload.setdefault("agent_name", "self_quality_agent")
+        file_path = DATA_ROOT / run_id / f"self_quality_agent_{scenario}.json"
+        save_json(file_path, payload)
+        return str(file_path)
 
     shared = [
         get_document_catalog_tool,
@@ -191,6 +258,11 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
         get_document_catalog_tool,
         get_scenario_definition_tool,
         get_subagent_outputs_tool,
+    ]
+    self_quality_tools = [
+        get_corrected_document_outputs_tool,
+        run_self_quality_review_tool,
+        persist_self_quality_output_tool,
     ]
     return {
         "shared": shared,
@@ -215,6 +287,7 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
             run_coverage_review_tool,
             persist_subagent_output_tool,
         ],
+        "self_quality": self_quality_tools,
         "improvement": [
             get_scenario_definition_tool,
             build_improvement_actions_tool,
@@ -230,6 +303,7 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
             "ui_match_agent": [str(SKILLS_ROOT / "ui_match_agent")],
             "coverage_agent": [str(SKILLS_ROOT / "coverage_agent")],
             "improvement_agent": [str(SKILLS_ROOT / "improvement_agent")],
+            "self_quality_agent": [str(SKILLS_ROOT / "self_quality_agent")],
             "report_agent": [str(SKILLS_ROOT / "report_agent")],
         },
     }
@@ -1037,6 +1111,1063 @@ def make_coverage_recommendations(findings: List[str], warnings: List[str]) -> L
     return list(actions)
 
 
+def persist_corrected_documents(
+    run_id: str,
+    documents: List[Dict[str, Any]],
+    scenario_key: str,
+    agent_name: str,
+    review_payload: Dict[str, Any],
+) -> List[str]:
+    """시나리오 점검 결과를 반영한 문서별 보완본 JSON을 저장합니다."""
+    scenario = canonical_scenario_key(scenario_key) or canonical_scenario_key(agent_name)
+    output_prefix = corrected_output_prefix(scenario, agent_name)
+    outputs: Dict[str, Dict[str, Any]] = {}
+    changes_by_document: Dict[str, List[Dict[str, Any]]] = {key: [] for key in DOCUMENT_LABELS}
+    warnings_by_document: Dict[str, List[str]] = {key: [] for key in DOCUMENT_LABELS}
+
+    for document_key in DOCUMENT_LABELS:
+        document = get_document(documents, document_key)
+        outputs[document_key] = build_corrected_document_payload(
+            document_key=document_key,
+            document=document,
+            scenario_key=scenario,
+            agent_name=agent_name,
+            review_payload=review_payload,
+        )
+        apply_common_document_corrections(
+            document_key,
+            outputs[document_key],
+            scenario,
+            changes_by_document[document_key],
+            warnings_by_document[document_key],
+        )
+
+    if scenario == "traceability":
+        apply_traceability_document_corrections(outputs, changes_by_document, warnings_by_document)
+    elif scenario == "ui_match":
+        apply_ui_match_document_corrections(outputs, changes_by_document, warnings_by_document)
+    elif scenario == "coverage":
+        apply_coverage_document_corrections(outputs, changes_by_document, warnings_by_document)
+
+    saved_paths: List[str] = []
+    for document_key, payload in outputs.items():
+        payload["correction_metadata"]["applied_changes"] = changes_by_document[document_key]
+        payload["correction_metadata"]["remaining_warnings"] = warnings_by_document[document_key]
+        payload["correction_metadata"]["change_count"] = len(changes_by_document[document_key])
+        file_path = corrected_document_output_path(run_id, scenario, output_prefix, document_key)
+        save_json(file_path, payload)
+        saved_paths.append(str(file_path))
+
+    return saved_paths
+
+
+def maybe_persist_corrected_documents(
+    run_id: str,
+    documents: List[Dict[str, Any]],
+    scenario_key: str,
+    agent_name: str,
+    review_payload: Dict[str, Any],
+) -> List[str]:
+    """Persist corrected document outputs only for agents that actually perform corrections."""
+    scenario = canonical_scenario_key(scenario_key) or canonical_scenario_key(agent_name)
+    if scenario == "coverage":
+        return []
+    return persist_corrected_documents(run_id, documents, scenario, agent_name, review_payload)
+
+
+def build_corrected_document_payload(
+    document_key: str,
+    document: Optional[Dict[str, Any]],
+    scenario_key: str,
+    agent_name: str,
+    review_payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """원본 파싱 JSON 구조를 유지하면서 보완본 메타데이터를 붙입니다."""
+    if document is None:
+        payload: Dict[str, Any] = {
+            "parser": "missing_document",
+            "parser_status": "not_found",
+            "sheet_count": 0,
+            "sheet_names": [],
+            "sheets": [],
+        }
+    else:
+        payload = deepcopy(document.get("content_summary", {}))
+        if not isinstance(payload, dict):
+            payload = {"parser": "unknown", "parser_status": "invalid_payload", "sheets": []}
+
+    payload.setdefault("sheets", [])
+    payload["correction_metadata"] = {
+        "document_key": document_key,
+        "document_label": DOCUMENT_LABELS.get(document_key, document_key),
+        "source_agent": sanitize_name(agent_name),
+        "scenario_key": scenario_key,
+        "source_file_name": document.get("file_name", "") if document else "",
+        "source_saved_path": document.get("saved_path", "") if document else "",
+        "source_review": {
+            "summary": review_payload.get("summary", ""),
+            "score": review_payload.get("score"),
+            "findings": list(review_payload.get("findings") or []),
+            "warnings": list(review_payload.get("warnings") or []),
+            "recommendations": list(review_payload.get("recommendations") or []),
+        },
+        "self_quality_check_target": True,
+        "note": "자가 품질 점검 Agent가 원본 대비 보완 적용 여부를 검증할 수 있도록 생성한 문서별 보완본입니다.",
+        "applied_changes": [],
+        "remaining_warnings": [],
+        "change_count": 0,
+    }
+    return payload
+
+
+def apply_common_document_corrections(
+    document_key: str,
+    payload: Dict[str, Any],
+    scenario_key: str,
+    changes: List[Dict[str, Any]],
+    remaining_warnings: List[str],
+) -> None:
+    """모든 시나리오에서 안전하게 적용할 수 있는 기초 보정을 수행합니다."""
+    del scenario_key
+    allowed_status = {"신규", "추가", "수정", "삭제", "진행중", "완료", "보류"}
+    typo_dictionary = {
+        "모니터링ㄱ": "모니터링",
+        "결괏": "결과",
+        "누랑": "누락",
+        "대시보트": "대시보드",
+        "포멧팅": "포매팅",
+        "에이전투": "에이전트",
+        "Agnet": "Agent",
+        "Desginer": "Designer",
+        "재검토요망": "재검토 필요",
+    }
+
+    for sheet in payload.get("sheets", []):
+        rows = sheet.get("data", [])
+        if not isinstance(rows, list):
+            continue
+        columns = sheet.get("columns", [])
+        if not isinstance(columns, list):
+            columns = []
+
+        req_col = find_column_name(columns, ["요구사항 id"])
+        func_col = find_column_name(columns, ["기능id"])
+        ui_col = find_column_name(columns, ["화면id"])
+        status_col = find_column_name(columns, ["상태"])
+        priority_col = find_column_name(columns, ["우선순위"])
+        ui_type_col = find_column_name(columns, ["화면유형"])
+
+        for row_index, row in enumerate(rows, start=4):
+            if not isinstance(row, dict):
+                continue
+
+            for column_name, raw_value in list(row.items()):
+                if not isinstance(raw_value, str):
+                    continue
+                cleaned = re.sub(r"[\t\r\n]+", " ", raw_value).strip()
+                for typo, corrected in typo_dictionary.items():
+                    cleaned = cleaned.replace(typo, corrected)
+                update_cell_if_changed(
+                    row,
+                    column_name,
+                    cleaned,
+                    document_key,
+                    sheet.get("sheet_name", ""),
+                    row_index,
+                    changes,
+                    "trim_typo_control_characters",
+                )
+
+            normalize_id_cell(row, req_col, _suggest_req_id, document_key, sheet, row_index, changes)
+            normalize_id_cell(row, func_col, _suggest_func_id, document_key, sheet, row_index, changes)
+            normalize_id_cell(row, ui_col, _suggest_ui_id, document_key, sheet, row_index, changes)
+
+            if status_col:
+                status = str(row.get(status_col, "")).strip()
+                if not status:
+                    update_cell_if_changed(
+                        row,
+                        status_col,
+                        "신규",
+                        document_key,
+                        sheet.get("sheet_name", ""),
+                        row_index,
+                        changes,
+                        "fill_missing_status",
+                    )
+                elif status not in allowed_status:
+                    remaining_warnings.append(
+                        f"{DOCUMENT_LABELS[document_key]} {row_index}행 상태 '{status}'은 자동 확정하기 어려워 자가점검이 필요합니다."
+                    )
+
+            if priority_col:
+                priority = str(row.get(priority_col, "")).strip()
+                if not priority:
+                    update_cell_if_changed(
+                        row,
+                        priority_col,
+                        "3",
+                        document_key,
+                        sheet.get("sheet_name", ""),
+                        row_index,
+                        changes,
+                        "fill_missing_priority",
+                    )
+                elif priority.isdigit() and int(priority) > 5:
+                    update_cell_if_changed(
+                        row,
+                        priority_col,
+                        "5",
+                        document_key,
+                        sheet.get("sheet_name", ""),
+                        row_index,
+                        changes,
+                        "cap_priority_to_allowed_range",
+                    )
+
+            if ui_type_col and not str(row.get(ui_type_col, "")).strip():
+                update_cell_if_changed(
+                    row,
+                    ui_type_col,
+                    "화면",
+                    document_key,
+                    sheet.get("sheet_name", ""),
+                    row_index,
+                    changes,
+                    "fill_missing_ui_type",
+                )
+
+
+def apply_traceability_document_corrections(
+    outputs: Dict[str, Dict[str, Any]],
+    changes_by_document: Dict[str, List[Dict[str, Any]]],
+    warnings_by_document: Dict[str, List[str]],
+) -> None:
+    """ID 연결성 보완을 위해 누락된 연결 후보 행을 생성합니다."""
+    requirement_rows = output_rows(outputs["requirement_definition"])
+    feature_rows = output_rows(outputs["feature_definition"])
+    ui_rows = output_rows(outputs["ui_design"])
+
+    req_col = find_column(requirement_rows, ["요구사항 id"])
+    feat_req_col = find_column(feature_rows, ["요구사항 id"])
+    feat_screen_col = find_column(feature_rows, ["화면id"])
+    ui_screen_col = find_column(ui_rows, ["화면id"])
+
+    req_ids = set(non_empty_values(requirement_rows, req_col))
+    feature_req_ids = set(non_empty_values(feature_rows, feat_req_col))
+    ui_screen_ids = set(non_empty_values(ui_rows, ui_screen_col))
+
+    for req_id in missing_values(req_ids, feature_req_ids):
+        requirement_row = first_row_by_value(requirement_rows, req_col, req_id)
+        added = append_feature_candidate(outputs["feature_definition"], requirement_row, req_id, "traceability-agent 연결 보완 후보")
+        if added:
+            changes_by_document["feature_definition"].append(added)
+
+    if feat_screen_col and ui_screen_col:
+        for feature_row in feature_rows:
+            screen_id = str(feature_row.get(feat_screen_col, "")).strip()
+            if not screen_id or screen_id in ui_screen_ids:
+                continue
+            added = append_ui_candidate(outputs["ui_design"], feature_row, screen_id, "traceability-agent 화면 연결 보완 후보")
+            if added:
+                ui_screen_ids.add(screen_id)
+                changes_by_document["ui_design"].append(added)
+    else:
+        warnings_by_document["ui_design"].append("화면ID 컬럼을 찾지 못해 traceability 보완 행 자동 생성이 제한되었습니다.")
+
+
+def apply_ui_match_document_corrections(
+    outputs: Dict[str, Dict[str, Any]],
+    changes_by_document: Dict[str, List[Dict[str, Any]]],
+    warnings_by_document: Dict[str, List[str]],
+) -> None:
+    """기능-UI 의미 일치성 보완을 위해 UI 행위/입출력 항목을 보강합니다."""
+    feature_rows = output_rows(outputs["feature_definition"])
+    ui_rows = output_rows(outputs["ui_design"])
+    feature_id_col = find_column(feature_rows, ["기능id"])
+    screen_col = find_column(feature_rows, ["화면id"])
+    ui_feature_id_col = find_column(ui_rows, ["기능id"])
+    ui_screen_col = find_column(ui_rows, ["화면id"])
+    ui_action_col = find_column(ui_rows, ["사용자행위", "버튼"])
+    ui_input_col = find_column(ui_rows, ["주요 입력", "입력"])
+    ui_output_col = find_column(ui_rows, ["주요 출력", "출력"])
+    feature_input_col = find_column(feature_rows, ["입력"])
+    feature_output_col = find_column(feature_rows, ["출력"])
+    feature_desc_cols = [
+        column for column in [
+            find_column(feature_rows, ["기능명"]),
+            find_column(feature_rows, ["설명"]),
+            find_column(feature_rows, ["기능"]),
+        ] if column
+    ]
+    ui_by_feature_id = group_rows_by_value(ui_rows, ui_feature_id_col)
+    ui_by_screen_id = group_rows_by_value(ui_rows, ui_screen_col)
+
+    for feature_row in feature_rows:
+        feature_id = cell_value(feature_row, feature_id_col)
+        screen_id = cell_value(feature_row, screen_col)
+        matched_ui_rows = ui_by_feature_id.get(feature_id, []) if feature_id else []
+        if not matched_ui_rows and screen_id:
+            matched_ui_rows = ui_by_screen_id.get(screen_id, [])
+        if not matched_ui_rows:
+            warnings_by_document["ui_design"].append(
+                f"기능ID {feature_id or '(미기재)'} / 화면ID {screen_id or '(미기재)'}에 매칭되는 UI 행이 없어 자동 보강이 제한되었습니다."
+            )
+            continue
+
+        target_row = matched_ui_rows[0]
+        target_index = ui_rows.index(target_row) + 4
+        feature_text = row_text(feature_row, feature_desc_cols)
+        missing_actions = sorted(detect_action_terms(feature_text) - detect_action_terms(cell_value(target_row, ui_action_col)))
+        append_terms_to_cell(
+            target_row,
+            ui_action_col,
+            missing_actions,
+            "사용자행위/버튼",
+            "ui_match_append_missing_actions",
+            "ui_design",
+            target_index,
+            changes_by_document["ui_design"],
+        )
+        append_terms_to_cell(
+            target_row,
+            ui_input_col,
+            missing_field_terms(cell_value(feature_row, feature_input_col), cell_value(target_row, ui_input_col)),
+            "주요 입력",
+            "ui_match_append_missing_inputs",
+            "ui_design",
+            target_index,
+            changes_by_document["ui_design"],
+        )
+        append_terms_to_cell(
+            target_row,
+            ui_output_col,
+            missing_field_terms(cell_value(feature_row, feature_output_col), cell_value(target_row, ui_output_col)),
+            "주요 출력",
+            "ui_match_append_missing_outputs",
+            "ui_design",
+            target_index,
+            changes_by_document["ui_design"],
+        )
+
+
+def apply_coverage_document_corrections(
+    outputs: Dict[str, Dict[str, Any]],
+    changes_by_document: Dict[str, List[Dict[str, Any]]],
+    warnings_by_document: Dict[str, List[str]],
+) -> None:
+    """요구사항 커버리지 보완을 위해 누락된 기능/UI 후보 행을 생성합니다."""
+    requirement_rows = output_rows(outputs["requirement_definition"])
+    feature_rows = output_rows(outputs["feature_definition"])
+    ui_rows = output_rows(outputs["ui_design"])
+    req_col = find_column(requirement_rows, ["요구사항 id"])
+    feat_req_col = find_column(feature_rows, ["요구사항 id"])
+    ui_req_col = find_column(ui_rows, ["요구사항 id"])
+
+    req_ids = set(non_empty_values(requirement_rows, req_col))
+    feature_req_ids = set(non_empty_values(feature_rows, feat_req_col))
+    ui_req_ids = set(non_empty_values(ui_rows, ui_req_col))
+
+    for req_id in missing_values(req_ids, feature_req_ids):
+        requirement_row = first_row_by_value(requirement_rows, req_col, req_id)
+        added = append_feature_candidate(outputs["feature_definition"], requirement_row, req_id, "coverage-agent 기능 커버리지 보완 후보")
+        if added:
+            changes_by_document["feature_definition"].append(added)
+
+    for req_id in missing_values(req_ids, ui_req_ids):
+        requirement_row = first_row_by_value(requirement_rows, req_col, req_id)
+        screen_id = suggested_ui_id_from_req(req_id)
+        added = append_ui_candidate(outputs["ui_design"], requirement_row, screen_id, "coverage-agent UI 커버리지 보완 후보")
+        if added:
+            changes_by_document["ui_design"].append(added)
+
+    extra_feature_req_ids = missing_values(feature_req_ids, req_ids)
+    if extra_feature_req_ids:
+        feature_note_col = ensure_column(outputs["feature_definition"], "기타")
+        for row in feature_rows:
+            req_id = cell_value(row, feat_req_col)
+            if req_id in extra_feature_req_ids:
+                append_terms_to_cell(
+                    row,
+                    feature_note_col,
+                    ["요구사항 근거 확인 필요"],
+                    "기타",
+                    "coverage_mark_extra_feature_scope",
+                    "feature_definition",
+                    feature_rows.index(row) + 4,
+                    changes_by_document["feature_definition"],
+                )
+    if not req_col:
+        warnings_by_document["requirement_definition"].append("요구사항 ID 컬럼을 찾지 못해 coverage 보완 후보 생성이 제한되었습니다.")
+
+
+def output_rows(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """보완본 payload의 모든 행을 반환합니다."""
+    rows: List[Dict[str, Any]] = []
+    for sheet in payload.get("sheets", []):
+        if isinstance(sheet, dict):
+            data = sheet.get("data", [])
+            if isinstance(data, list):
+                rows.extend(row for row in data if isinstance(row, dict))
+    return rows
+
+
+def find_column_name(columns: List[str], keywords: List[str]) -> Optional[str]:
+    """컬럼명 목록에서 키워드에 맞는 컬럼을 찾습니다."""
+    for column in columns:
+        normalized_column = normalize(column)
+        for keyword in keywords:
+            if normalize(keyword) in normalized_column:
+                return column
+    return None
+
+
+def normalize_id_cell(
+    row: Dict[str, Any],
+    column_name: Optional[str],
+    suggest_func,
+    document_key: str,
+    sheet: Dict[str, Any],
+    row_index: int,
+    changes: List[Dict[str, Any]],
+) -> None:
+    """ID 셀을 명확히 보정 가능한 표준 형식으로 수정합니다."""
+    if not column_name:
+        return
+    current_value = str(row.get(column_name, "")).strip()
+    suggestion = suggest_func(current_value) if current_value else None
+    if suggestion and suggestion != current_value:
+        update_cell_if_changed(
+            row,
+            column_name,
+            suggestion,
+            document_key,
+            sheet.get("sheet_name", ""),
+            row_index,
+            changes,
+            "normalize_identifier_format",
+        )
+
+
+def update_cell_if_changed(
+    row: Dict[str, Any],
+    column_name: str,
+    new_value: str,
+    document_key: str,
+    sheet_name: str,
+    row_index: int,
+    changes: List[Dict[str, Any]],
+    reason: str,
+) -> None:
+    """셀 값 변경 내역을 기록하며 값을 갱신합니다."""
+    old_value = row.get(column_name, "")
+    if old_value == new_value:
+        return
+    row[column_name] = new_value
+    changes.append({
+        "document_key": document_key,
+        "document_label": DOCUMENT_LABELS.get(document_key, document_key),
+        "sheet_name": sheet_name,
+        "row_index": row_index,
+        "column": column_name,
+        "before": old_value,
+        "after": new_value,
+        "reason": reason,
+    })
+
+
+def append_terms_to_cell(
+    row: Dict[str, Any],
+    column_name: Optional[str],
+    terms: List[str],
+    fallback_column_name: str,
+    reason: str,
+    document_key: str,
+    row_index: int,
+    changes: List[Dict[str, Any]],
+) -> None:
+    """셀에 누락된 용어를 중복 없이 추가합니다."""
+    if not terms:
+        return
+    target_column = column_name or fallback_column_name
+    current = str(row.get(target_column, "")).strip()
+    additions = [term for term in terms if term and term not in current]
+    if not additions:
+        return
+    joined = ", ".join(additions)
+    new_value = f"{current}, {joined}" if current else joined
+    update_cell_if_changed(row, target_column, new_value, document_key, "", row_index, changes, reason)
+
+
+def first_row_by_value(rows: List[Dict[str, Any]], column_name: Optional[str], value: str) -> Dict[str, Any]:
+    """특정 컬럼 값이 일치하는 첫 행을 반환합니다."""
+    if not column_name:
+        return {}
+    for row in rows:
+        if str(row.get(column_name, "")).strip() == value:
+            return row
+    return {}
+
+
+def append_feature_candidate(payload: Dict[str, Any], source_row: Dict[str, Any], req_id: str, note: str) -> Optional[Dict[str, Any]]:
+    """기능정의서 보완 후보 행을 추가합니다."""
+    sheet = first_payload_sheet(payload)
+    if sheet is None:
+        return None
+    columns = ensure_columns(sheet, ["시스템", "요구사항 ID", "기능ID", "기능명", "상태", "설명", "기능", "입력", "출력", "화면ID", "우선순위", "기타"])
+    new_row = {column: "" for column in columns}
+    req_num = req_number(req_id)
+    system_col = find_column_name(columns, ["시스템"]) or "시스템"
+    req_col = find_column_name(columns, ["요구사항 id"]) or "요구사항 ID"
+    func_col = find_column_name(columns, ["기능id"]) or "기능ID"
+    name_col = find_column_name(columns, ["기능명"]) or "기능명"
+    status_col = find_column_name(columns, ["상태"]) or "상태"
+    desc_col = find_column_name(columns, ["설명"]) or "설명"
+    body_col = find_column_name(columns, ["기능"]) or "기능"
+    input_col = find_column_name(columns, ["입력"]) or "입력"
+    output_col = find_column_name(columns, ["출력"]) or "출력"
+    ui_col = find_column_name(columns, ["화면id"]) or "화면ID"
+    priority_col = find_column_name(columns, ["우선순위"]) or "우선순위"
+    note_col = find_column_name(columns, ["기타"]) or "기타"
+    req_name_col = find_column([source_row], ["요구사항명"])
+
+    new_row[system_col] = cell_value(source_row, find_column([source_row], ["시스템"])) or "MES"
+    new_row[req_col] = req_id
+    new_row[func_col] = f"{req_id}-F01" if req_id else "자가점검필요-F01"
+    new_row[name_col] = cell_value(source_row, req_name_col) or f"{req_id} 기능 보완"
+    new_row[status_col] = "신규"
+    new_row[desc_col] = row_text(source_row, list(source_row.keys())) or "자가점검 필요"
+    new_row[body_col] = row_text(source_row, list(source_row.keys())) or "자가점검 필요"
+    new_row[input_col] = "자가점검 필요"
+    new_row[output_col] = "자가점검 필요"
+    new_row[ui_col] = suggested_ui_id_from_req(req_id) if req_num is not None else "UI-자가점검"
+    new_row[priority_col] = "3"
+    new_row[note_col] = note
+    sheet.setdefault("data", []).append(new_row)
+    sheet["row_count"] = len(sheet.get("data", []))
+    return {
+        "document_key": "feature_definition",
+        "document_label": DOCUMENT_LABELS["feature_definition"],
+        "sheet_name": sheet.get("sheet_name", ""),
+        "row_index": sheet["row_count"] + 3,
+        "column": "*",
+        "before": None,
+        "after": new_row,
+        "reason": "append_feature_candidate",
+    }
+
+
+def append_ui_candidate(payload: Dict[str, Any], source_row: Dict[str, Any], screen_id: str, note: str) -> Optional[Dict[str, Any]]:
+    """UI설계서 보완 후보 행을 추가합니다."""
+    sheet = first_payload_sheet(payload)
+    if sheet is None:
+        return None
+    columns = ensure_columns(sheet, ["시스템", "업무그룹", "요구사항 ID", "기능ID", "화면ID", "화면명", "화면유형", "상태", "사용자행위/버튼", "권한", "주요 입력", "주요 출력", "기타"])
+    new_row = {column: "" for column in columns}
+    req_id = cell_value(source_row, find_column([source_row], ["요구사항 id"]))
+    func_id = cell_value(source_row, find_column([source_row], ["기능id"])) or (f"{req_id}-F01" if req_id else "")
+    name = cell_value(source_row, find_column([source_row], ["기능명", "요구사항명"])) or f"{screen_id} 화면"
+
+    set_if_column(new_row, columns, ["시스템"], cell_value(source_row, find_column([source_row], ["시스템"])) or "MES")
+    set_if_column(new_row, columns, ["업무그룹"], cell_value(source_row, find_column([source_row], ["업무그룹"])))
+    set_if_column(new_row, columns, ["요구사항 id"], req_id)
+    set_if_column(new_row, columns, ["기능id"], func_id)
+    set_if_column(new_row, columns, ["화면id"], screen_id)
+    set_if_column(new_row, columns, ["화면명"], name)
+    set_if_column(new_row, columns, ["화면유형"], "화면")
+    set_if_column(new_row, columns, ["상태"], "신규")
+    set_if_column(new_row, columns, ["사용자행위", "버튼"], ", ".join(sorted(detect_action_terms(row_text(source_row, list(source_row.keys()))))) or "조회")
+    set_if_column(new_row, columns, ["권한"], "일반사용자")
+    set_if_column(new_row, columns, ["주요 입력", "입력"], cell_value(source_row, find_column([source_row], ["입력"])) or "자가점검 필요")
+    set_if_column(new_row, columns, ["주요 출력", "출력"], cell_value(source_row, find_column([source_row], ["출력"])) or "자가점검 필요")
+    set_if_column(new_row, columns, ["기타"], note)
+    sheet.setdefault("data", []).append(new_row)
+    sheet["row_count"] = len(sheet.get("data", []))
+    return {
+        "document_key": "ui_design",
+        "document_label": DOCUMENT_LABELS["ui_design"],
+        "sheet_name": sheet.get("sheet_name", ""),
+        "row_index": sheet["row_count"] + 3,
+        "column": "*",
+        "before": None,
+        "after": new_row,
+        "reason": "append_ui_candidate",
+    }
+
+
+def first_payload_sheet(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """payload의 첫 번째 시트를 반환하고 없으면 기본 시트를 생성합니다."""
+    sheets = payload.setdefault("sheets", [])
+    if not isinstance(sheets, list):
+        payload["sheets"] = []
+        sheets = payload["sheets"]
+    if not sheets:
+        sheets.append({"sheet_name": "보완본", "file_name": "보완본", "columns": [], "data": [], "row_count": 0})
+    return sheets[0] if isinstance(sheets[0], dict) else None
+
+
+def ensure_columns(sheet: Dict[str, Any], required_columns: List[str]) -> List[str]:
+    """시트에 필요한 컬럼을 추가하고 컬럼 목록을 반환합니다."""
+    columns = sheet.setdefault("columns", [])
+    if not isinstance(columns, list):
+        columns = []
+        sheet["columns"] = columns
+    for column in required_columns:
+        if not find_column_name(columns, [column]):
+            columns.append(column)
+    return columns
+
+
+def ensure_column(payload: Dict[str, Any], column_name: str) -> str:
+    """첫 시트에 컬럼을 보장하고 실제 컬럼명을 반환합니다."""
+    sheet = first_payload_sheet(payload)
+    if sheet is None:
+        return column_name
+    columns = ensure_columns(sheet, [column_name])
+    return find_column_name(columns, [column_name]) or column_name
+
+
+def set_if_column(row: Dict[str, Any], columns: List[str], keywords: List[str], value: str) -> None:
+    """키워드에 맞는 컬럼에 값을 설정합니다."""
+    column = find_column_name(columns, keywords)
+    if column:
+        row[column] = value
+
+
+def req_number(req_id: str) -> Optional[int]:
+    """REQ-###에서 숫자 부분을 반환합니다."""
+    match = re.search(r"(\d{1,3})", str(req_id))
+    return int(match.group(1)) if match else None
+
+
+def suggested_ui_id_from_req(req_id: str) -> str:
+    """요구사항 ID 기반 화면ID 후보를 생성합니다."""
+    number = req_number(req_id)
+    return f"UI-{number:03d}" if number is not None else "UI-자가점검"
+
+
+def corrected_output_prefix(scenario_key: str, agent_name: str) -> str:
+    """문서별 보완본 파일 prefix를 반환합니다."""
+    scenario = canonical_scenario_key(scenario_key) or canonical_scenario_key(agent_name)
+    prefixes = {
+        "basic_quality": "basic_quality_agent",
+        "traceability": "traceability_agent",
+        "ui_match": "ui_match_agent",
+        "coverage": "coverage_agent",
+    }
+    return prefixes.get(scenario, sanitize_name(agent_name).replace("-", "_"))
+
+
+def corrected_document_output_path(
+    run_id: str,
+    scenario_key: str,
+    output_prefix: str,
+    document_key: str,
+) -> Path:
+    """문서별 보완본 JSON 저장 경로를 반환합니다."""
+    scenario = canonical_scenario_key(scenario_key)
+    return DATA_ROOT / run_id / scenario / f"{output_prefix}_output_{document_key}.json"
+
+
+def get_corrected_document_outputs(run_id: str, scenario_key: str) -> Dict[str, Any]:
+    """저장된 원 SubAgent 결과와 문서별 보완본 요약을 읽습니다."""
+    scenario = canonical_scenario_key(scenario_key)
+    prefix = corrected_output_prefix(scenario, f"{scenario}-agent")
+    subagent_result = load_subagent_result(run_id, scenario)
+    documents: Dict[str, Dict[str, Any]] = {}
+    missing_documents: List[str] = []
+
+    for document_key in DOCUMENT_LABELS:
+        file_path = corrected_document_output_path(run_id, scenario, prefix, document_key)
+        if not file_path.exists():
+            documents[document_key] = {
+                "document_key": document_key,
+                "document_label": DOCUMENT_LABELS[document_key],
+                "artifact_path": str(file_path),
+                "status": "missing",
+            }
+            missing_documents.append(document_key)
+            continue
+        payload = load_json_dict(file_path)
+        documents[document_key] = summarize_corrected_document_payload(document_key, payload, file_path)
+
+    return {
+        "run_id": run_id,
+        "scenario_key": scenario,
+        "target_agent_name": corrected_output_prefix(scenario, f"{scenario}-agent"),
+        "subagent_result": summarize_subagent_result(subagent_result),
+        "documents": documents,
+        "missing_documents": missing_documents,
+    }
+
+
+def load_corrected_document_payloads(run_id: str, scenario_key: str) -> Dict[str, Dict[str, Any]]:
+    """자가 점검 내부 실행용으로 보완본 전체 payload를 읽습니다."""
+    scenario = canonical_scenario_key(scenario_key)
+    prefix = corrected_output_prefix(scenario, f"{scenario}-agent")
+    documents: Dict[str, Dict[str, Any]] = {}
+    for document_key in DOCUMENT_LABELS:
+        file_path = corrected_document_output_path(run_id, scenario, prefix, document_key)
+        if not file_path.exists():
+            documents[document_key] = {
+                "document_key": document_key,
+                "document_label": DOCUMENT_LABELS[document_key],
+                "artifact_path": str(file_path),
+                "status": "missing",
+            }
+            continue
+        payload = load_json_dict(file_path)
+        payload.setdefault("document_key", document_key)
+        payload.setdefault("document_label", DOCUMENT_LABELS[document_key])
+        payload.setdefault("artifact_path", str(file_path))
+        documents[document_key] = payload
+    return documents
+
+
+def summarize_corrected_document_payload(document_key: str, payload: Dict[str, Any], file_path: Path) -> Dict[str, Any]:
+    """LLM 도구 반환을 작게 유지하기 위한 보완본 요약을 만듭니다."""
+    if payload.get("load_error"):
+        return {
+            "document_key": document_key,
+            "document_label": DOCUMENT_LABELS.get(document_key, document_key),
+            "artifact_path": str(file_path),
+            "parser_status": "load_error",
+            "status": "load_error",
+            "load_error": payload.get("load_error"),
+            "sheet_count": 0,
+            "row_count": 0,
+            "change_count": 0,
+            "applied_change_samples": [],
+            "remaining_warning_samples": [],
+        }
+
+    metadata = payload.get("correction_metadata", {}) if isinstance(payload, dict) else {}
+    applied_changes = metadata.get("applied_changes", []) if isinstance(metadata, dict) else []
+    remaining_warnings = metadata.get("remaining_warnings", []) if isinstance(metadata, dict) else []
+    sheets = payload.get("sheets", []) if isinstance(payload, dict) else []
+    row_count = 0
+    if isinstance(sheets, list):
+        row_count = sum(
+            len(sheet.get("data") or [])
+            for sheet in sheets
+            if isinstance(sheet, dict) and isinstance(sheet.get("data"), list)
+        )
+    return {
+        "document_key": document_key,
+        "document_label": DOCUMENT_LABELS.get(document_key, document_key),
+        "artifact_path": str(file_path),
+        "parser_status": payload.get("parser_status") if isinstance(payload, dict) else "invalid",
+        "sheet_count": payload.get("sheet_count", len(sheets) if isinstance(sheets, list) else 0) if isinstance(payload, dict) else 0,
+        "row_count": row_count,
+        "change_count": len(applied_changes) if isinstance(applied_changes, list) else 0,
+        "applied_change_samples": limit_items(applied_changes if isinstance(applied_changes, list) else [], 3),
+        "remaining_warning_samples": limit_items(remaining_warnings if isinstance(remaining_warnings, list) else [], 3),
+    }
+
+
+def summarize_subagent_result(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """원 SubAgent 결과도 요약해서 LLM으로 넘깁니다."""
+    if not isinstance(payload, dict):
+        return {}
+    if payload.get("load_error"):
+        return {"load_error": payload.get("load_error")}
+    return {
+        "scenario_key": canonical_scenario_key(payload.get("scenario_key") or payload.get("agent_name")),
+        "agent_name": payload.get("agent_name", ""),
+        "summary": payload.get("summary", ""),
+        "score": payload.get("score"),
+        "findings_count": len(payload.get("findings") or []),
+        "warnings_count": len(payload.get("warnings") or []),
+        "recommendations_count": len(payload.get("recommendations") or []),
+        "finding_samples": limit_items(payload.get("findings") or [], 5),
+        "warning_samples": limit_items(payload.get("warnings") or [], 5),
+        "corrected_document_paths": limit_items(payload.get("corrected_document_paths") or [], 3),
+    }
+
+
+def compact_subagent_output_for_report(payload: Dict[str, Any]) -> Dict[str, Any]:
+    """Return only bounded fields needed by report-agent."""
+    if not isinstance(payload, dict):
+        return {}
+    if payload.get("load_error"):
+        return {
+            "agent_name": payload.get("agent_name", ""),
+            "artifact_path": payload.get("artifact_path", ""),
+            "load_error": payload.get("load_error"),
+        }
+    return {
+        "scenario_key": canonical_scenario_key(payload.get("scenario_key") or payload.get("agent_name")),
+        "agent_name": payload.get("agent_name", ""),
+        "artifact_path": payload.get("artifact_path", ""),
+        "summary": payload.get("summary", ""),
+        "score": payload.get("score"),
+        "findings": limit_items(payload.get("findings") or [], 8),
+        "warnings": limit_items(payload.get("warnings") or [], 8),
+        "recommendations": limit_items(payload.get("recommendations") or [], 8),
+        "findings_count": len(payload.get("findings") or []),
+        "warnings_count": len(payload.get("warnings") or []),
+        "recommendations_count": len(payload.get("recommendations") or []),
+    }
+
+
+def run_self_quality_review(run_id: str, scenario_key: str, threshold: int = 85) -> Dict[str, Any]:
+    """문서별 보완본을 다시 점검해 교정 품질과 재실행 필요 여부를 판단합니다."""
+    scenario = canonical_scenario_key(scenario_key)
+    if scenario == "coverage":
+        return {
+            "scenario_key": "coverage",
+            "target_agent_name": "coverage-agent",
+            "summary": "coverage-agent는 산출물 교정이 아니라 누락/추가 권고를 생성하는 역할이므로 자가 교정 점검을 수행하지 않습니다.",
+            "score": 100,
+            "threshold": threshold,
+            "rerun_required": False,
+            "findings": [],
+            "warnings": [],
+            "correction_guidance": [],
+            "checked_document_paths": [],
+            "document_scores": {},
+            "skipped": True,
+        }
+    subagent_result = load_subagent_result(run_id, scenario)
+    corrected_docs_by_key = load_corrected_document_payloads(run_id, scenario)
+    findings: List[str] = []
+    warnings: List[str] = []
+    guidance: List[str] = []
+    document_scores: Dict[str, int] = {}
+    checked_paths: List[str] = []
+
+    corrected_documents: List[Dict[str, Any]] = []
+    for document_key, document_label in DOCUMENT_LABELS.items():
+        payload = corrected_docs_by_key.get(document_key, {})
+        artifact_path = payload.get("artifact_path", "")
+        if artifact_path:
+            checked_paths.append(str(artifact_path))
+
+        if payload.get("status") == "missing":
+            findings.append(f"{document_label} 보완본 JSON이 생성되지 않았습니다.")
+            guidance.append(f"{document_label} 보완본을 {corrected_output_prefix(scenario, scenario)}_output_{document_key}.json 형식으로 생성하세요.")
+            document_scores[document_key] = 0
+            continue
+
+        document_score = score_corrected_document(document_key, payload, findings, warnings, guidance)
+        document_scores[document_key] = document_score
+        corrected_documents.append({
+            "document_key": document_key,
+            "document_label": document_label,
+            "file_name": payload.get("correction_metadata", {}).get("source_file_name", ""),
+            "saved_path": artifact_path,
+            "content_summary": payload,
+        })
+
+    scenario_review = run_review_for_scenario(scenario, corrected_documents)
+    residual_findings = list(scenario_review.get("findings") or [])
+    residual_warnings = list(scenario_review.get("warnings") or [])
+    if residual_findings:
+        findings.extend(f"보완본 재점검 잔여 오류: {item}" for item in residual_findings)
+        guidance.extend(build_guidance_from_messages(scenario, residual_findings))
+    if residual_warnings:
+        warnings.extend(f"보완본 재점검 잔여 경고: {item}" for item in residual_warnings)
+
+    source_findings_count = len(subagent_result.get("findings") or []) if isinstance(subagent_result, dict) else 0
+    source_warnings_count = len(subagent_result.get("warnings") or []) if isinstance(subagent_result, dict) else 0
+    applied_change_count = sum(
+        len((payload.get("correction_metadata") or {}).get("applied_changes") or [])
+        for payload in corrected_docs_by_key.values()
+        if isinstance(payload, dict)
+    )
+    if (source_findings_count or source_warnings_count) and applied_change_count == 0:
+        findings.append("원 점검 결과에 오류/경고가 있었지만 문서별 보완본의 applied_changes가 비어 있습니다.")
+        guidance.append("원 SubAgent는 findings/warnings 근거에 따라 최소 1개 이상의 셀 수정 또는 보완 후보 행 추가를 수행해야 합니다.")
+
+    structure_score = round(sum(document_scores.values()) / len(DOCUMENT_LABELS)) if document_scores else 0
+    residual_score = int(scenario_review.get("score", 0)) if isinstance(scenario_review.get("score"), int) else 0
+    score = max(0, min(100, round((structure_score * 0.45) + (residual_score * 0.55))))
+    if findings:
+        score = max(0, score - min(30, len(findings) * 5))
+    if warnings:
+        score = max(0, score - min(15, len(warnings) * 2))
+
+    rerun_required = score < threshold
+    target_agent_name = scenario_to_agent_name(scenario)
+    if rerun_required and not guidance:
+        guidance.append(f"{target_agent_name}를 재실행해 문서별 보완본의 잔여 오류를 줄이고 corrected_document_paths를 다시 생성하세요.")
+
+    summary = (
+        f"{target_agent_name} 문서별 보완본 3종을 자가 점검했습니다. "
+        f"교정 품질 점수는 {score}점이며 기준점수 {threshold}점 "
+        f"{'미만으로 재실행이 필요합니다' if rerun_required else '이상으로 통과했습니다'}."
+    )
+    return {
+        "scenario_key": scenario,
+        "target_agent_name": target_agent_name,
+        "summary": summary,
+        "score": score,
+        "threshold": threshold,
+        "rerun_required": rerun_required,
+        "findings": limit_items(findings, 8),
+        "warnings": limit_items(warnings, 8),
+        "correction_guidance": limit_items(guidance, 8),
+        "checked_document_paths": checked_paths,
+        "document_scores": document_scores,
+    }
+
+
+def score_corrected_document(
+    document_key: str,
+    payload: Dict[str, Any],
+    findings: List[str],
+    warnings: List[str],
+    guidance: List[str],
+) -> int:
+    """단일 보완본 문서 구조와 correction metadata 품질을 점수화합니다."""
+    score = 100
+    document_label = DOCUMENT_LABELS.get(document_key, document_key)
+    if payload.get("load_error"):
+        findings.append(f"{document_label} 보완본 JSON을 읽을 수 없습니다: {payload.get('load_error')}")
+        guidance.append(f"{document_label} 보완본을 UTF-8 JSON으로 다시 생성하세요.")
+        return 0
+
+    parser_status = payload.get("parser_status")
+    sheets = payload.get("sheets", [])
+    metadata = payload.get("correction_metadata", {})
+
+    if parser_status != "success":
+        score -= 25
+        findings.append(f"{document_label} 보완본 parser_status가 success가 아닙니다: {parser_status}")
+        guidance.append(f"{document_label} 보완본은 원본 파싱 JSON 구조와 parser_status=success를 유지해야 합니다.")
+    if not isinstance(sheets, list) or not sheets:
+        score -= 25
+        findings.append(f"{document_label} 보완본에 sheets 데이터가 없습니다.")
+        guidance.append(f"{document_label} 보완본에 원본 sheets[].data 구조를 유지하세요.")
+    else:
+        row_count = sum(len(sheet.get("data") or []) for sheet in sheets if isinstance(sheet, dict))
+        if row_count == 0:
+            score -= 15
+            findings.append(f"{document_label} 보완본에 데이터 행이 없습니다.")
+    if not isinstance(metadata, dict) or not metadata:
+        score -= 25
+        findings.append(f"{document_label} 보완본에 correction_metadata가 없습니다.")
+        guidance.append(f"{document_label} 보완본에 source_review, applied_changes, remaining_warnings를 포함하세요.")
+    else:
+        if not metadata.get("source_review"):
+            score -= 10
+            findings.append(f"{document_label} correction_metadata.source_review가 비어 있습니다.")
+        if "applied_changes" not in metadata:
+            score -= 10
+            findings.append(f"{document_label} correction_metadata.applied_changes가 없습니다.")
+        remaining = metadata.get("remaining_warnings") or []
+        if remaining:
+            score -= min(15, len(remaining) * 3)
+            warnings.extend(f"{document_label} 잔여 경고: {item}" for item in remaining[:5])
+
+    return max(0, min(100, score))
+
+
+def run_review_for_scenario(scenario_key: str, corrected_documents: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """보완본을 해당 시나리오 룰로 재점검합니다."""
+    if scenario_key == "basic_quality":
+        return review_basic_quality(corrected_documents)
+    if scenario_key == "traceability":
+        return review_traceability(corrected_documents)
+    if scenario_key == "ui_match":
+        return review_ui_match(corrected_documents)
+    if scenario_key == "coverage":
+        return review_coverage(corrected_documents)
+    return {
+        "scenario_key": scenario_key,
+        "summary": "지원하지 않는 시나리오입니다.",
+        "score": 0,
+        "findings": [f"지원하지 않는 시나리오: {scenario_key}"],
+        "warnings": [],
+        "recommendations": [],
+    }
+
+
+def compact_review_result(result: Dict[str, Any], limit: int = 8) -> Dict[str, Any]:
+    """Keep review tool payloads small before they enter subagent context."""
+    if not isinstance(result, dict):
+        return {}
+
+    compact = dict(result)
+    for key in ("findings", "warnings", "recommendations"):
+        values = compact.get(key)
+        if isinstance(values, list):
+            compact[f"{key}_count"] = len(values)
+            compact[key] = limit_items(values, limit)
+
+    summary = compact.get("summary")
+    if isinstance(summary, str) and len(summary) > 800:
+        compact["summary"] = f"{summary[:800]}..."
+
+    return compact
+
+
+def build_guidance_from_messages(scenario_key: str, messages: List[str]) -> List[str]:
+    """잔여 오류 메시지를 원 SubAgent 재실행 지침으로 변환합니다."""
+    target_agent_name = scenario_to_agent_name(scenario_key)
+    return [
+        f"{target_agent_name} 재실행 지침: {message} 이 항목이 보완본에 남지 않도록 관련 문서/행/컬럼을 수정하고 문서별 output JSON 3개를 다시 생성하세요."
+        for message in messages[:10]
+    ]
+
+
+def limit_items(items: Any, limit: int) -> List[Any]:
+    """도구 반환과 구조화 응답이 과도하게 커지지 않도록 목록을 제한합니다."""
+    if not isinstance(items, list):
+        return []
+    if limit <= 0:
+        return []
+    if len(items) <= limit:
+        return items
+    sample_count = max(limit - 1, 0)
+    remaining_count = len(items) - sample_count
+    return [*items[:sample_count], f"... 외 {remaining_count}건 생략"]
+
+
+def load_subagent_result(run_id: str, scenario_key: str) -> Dict[str, Any]:
+    """저장된 원 SubAgent 결과 JSON을 읽습니다."""
+    file_path = DATA_ROOT / run_id / canonical_subagent_file_name(scenario_key, scenario_to_agent_name(scenario_key))
+    return load_json_dict(file_path)
+
+
+def load_json_dict(file_path: Path) -> Dict[str, Any]:
+    """JSON dict 파일을 안전하게 읽습니다."""
+    if not file_path.exists():
+        return {}
+
+    last_error = ""
+    for encoding in ("utf-8", "utf-8-sig", "cp949", "euc-kr"):
+        try:
+            payload = json.loads(file_path.read_text(encoding=encoding))
+            return payload if isinstance(payload, dict) else {"load_error": "JSON root is not an object"}
+        except UnicodeDecodeError as error:
+            last_error = f"{encoding}: {error}"
+            continue
+        except json.JSONDecodeError as error:
+            last_error = f"{encoding}: {error}"
+            continue
+        except OSError as error:
+            return {"load_error": str(error)}
+
+    try:
+        raw_text = file_path.read_bytes().decode("utf-8", errors="replace")
+        payload = json.loads(raw_text)
+        return payload if isinstance(payload, dict) else {"load_error": "JSON root is not an object"}
+    except (OSError, json.JSONDecodeError) as error:
+        return {"load_error": last_error or str(error)}
+
+
+def scenario_to_agent_name(scenario_key: str) -> str:
+    """시나리오 키에 해당하는 원 SubAgent 이름을 반환합니다."""
+    names = {
+        "basic_quality": "basic-quality-agent",
+        "traceability": "traceability-agent",
+        "ui_match": "ui-match-agent",
+        "coverage": "coverage-agent",
+    }
+    return names.get(canonical_scenario_key(scenario_key), f"{scenario_key}-agent")
+
+
 def canonical_scenario_key(value: Any) -> str:
     """시나리오 키 또는 agent 이름을 표준 시나리오 키로 변환합니다."""
     raw_value = str(value or "").strip().lower()
@@ -1069,14 +2200,65 @@ def canonical_subagent_file_name(scenario_key: str, agent_name: str) -> str:
     return file_names.get(scenario, f"{sanitize_name(agent_name).replace('-', '_')}.json")
 
 
+def normalize_subagent_output_payload(
+    documents: List[Dict[str, Any]],
+    scenario_key: str,
+    agent_name: str,
+    payload: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Persist a real review payload even when the model passes a tiny tool-result payload."""
+    scenario = canonical_scenario_key(scenario_key) or canonical_scenario_key(agent_name)
+    if scenario not in {"basic_quality", "traceability", "ui_match", "coverage"}:
+        payload = payload if isinstance(payload, dict) else {}
+        payload.setdefault("agent_name", sanitize_name(agent_name))
+        payload["scenario_key"] = scenario
+        return payload
+
+    review_payload = run_review_for_scenario(scenario, documents)
+    normalized = dict(review_payload if isinstance(review_payload, dict) else {})
+    if not normalized or str(normalized.get("summary", "")).startswith("지원하지 않는"):
+        normalized = payload if isinstance(payload, dict) else {}
+
+    normalized["scenario_key"] = scenario
+    normalized["agent_name"] = scenario_to_agent_name(scenario)
+
+    if isinstance(payload, dict):
+        metadata_keys = ("artifact_path",) if scenario == "coverage" else ("artifact_path", "corrected_document_paths")
+        for key in metadata_keys:
+            if payload.get(key):
+                normalized[key] = payload[key]
+        if payload.get("summary") and is_subagent_report_payload(payload):
+            normalized["summary"] = payload["summary"]
+
+    return normalized
+
+
+def is_subagent_report_payload(payload: Dict[str, Any]) -> bool:
+    """Return True only for scenario review results, not corrected-document tool results."""
+    if not isinstance(payload, dict) or payload.get("corrected") is True:
+        return False
+    if payload.get("score") is None:
+        return False
+    if not isinstance(payload.get("summary"), str) or not payload.get("summary"):
+        return False
+    return any(isinstance(payload.get(key), list) for key in ("findings", "warnings", "recommendations"))
+
+
 def is_preferred_subagent_payload(candidate: Dict[str, Any], current: Dict[str, Any]) -> bool:
     """동일 시나리오 중 원본 서브에이전트 결과에 더 가까운 payload를 우선합니다."""
     candidate_name = str(candidate.get("agent_name", ""))
     current_name = str(current.get("agent_name", ""))
-    candidate_is_canonical = "-" not in candidate_name
-    current_is_canonical = "-" not in current_name
-    if candidate_is_canonical != current_is_canonical:
-        return candidate_is_canonical
+    candidate_is_report = is_subagent_report_payload(candidate)
+    current_is_report = is_subagent_report_payload(current)
+    if candidate_is_report != current_is_report:
+        return candidate_is_report
+
+    candidate_scenario = canonical_scenario_key(candidate.get("scenario_key") or candidate_name)
+    current_scenario = canonical_scenario_key(current.get("scenario_key") or current_name)
+    candidate_name_matches = canonical_scenario_key(candidate_name) == candidate_scenario
+    current_name_matches = canonical_scenario_key(current_name) == current_scenario
+    if candidate_name_matches != current_name_matches:
+        return candidate_name_matches
 
     # scenario_label/status만 붙은 보고서형 중복보다 원본 subagent payload를 우선합니다.
     candidate_has_report_fields = "scenario_label" in candidate or "status" in candidate

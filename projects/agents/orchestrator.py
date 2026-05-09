@@ -17,6 +17,7 @@ from agents.basic_quality_agent import build_basic_quality_agent_spec
 from agents.coverage_agent import build_coverage_agent_spec
 from agents.qa_agent import build_qa_agent_spec
 from agents.report_agent import build_report_agent_spec
+from agents.self_quality_agent import build_self_quality_agent_spec
 from agents.traceability_agent import build_traceability_agent_spec
 from agents.ui_match_agent import build_ui_match_agent_spec
 from tools.review_tools import build_toolset, get_document_catalog_data
@@ -47,6 +48,7 @@ SUBAGENT_BUILDERS = [
     build_traceability_agent_spec,
     build_ui_match_agent_spec,
     build_coverage_agent_spec,
+    build_self_quality_agent_spec,
     build_qa_agent_spec,
     build_report_agent_spec,
 ]  # 역할별 SubAgent 구성을 개별 파일에서 읽어오는 빌더 목록
@@ -72,6 +74,11 @@ SUBAGENT_DISPLAY = {
         "progress_key": "coverage",
         "counts_progress": True,
     },
+    "self-quality-agent": {
+        "label": "자가 교정 점검",
+        "progress_key": "self_quality",
+        "counts_progress": False,
+    },
     "qa-agent": {
         "label": "추가 확인 질문 정리",
         "progress_key": "qa",
@@ -94,7 +101,11 @@ TOOL_DISPLAY = {
     "run_coverage_review": "기능 완전성 분석 실행",
     "build_improvement_actions": "개선 액션 생성",
     "persist_subagent_output": "결과 저장",
+    "persist_corrected_document_outputs": "문서별 보완본 저장",
     "get_subagent_outputs": "서브에이전트 결과 수집",
+    "get_corrected_document_outputs": "문서별 보완본 조회",
+    "run_self_quality_review": "자가 교정 점검 실행",
+    "persist_self_quality_output": "자가 교정 결과 저장",
 }
 
 
@@ -109,7 +120,7 @@ def create_orchestrator_agent(agent_request: Dict[str, Any]):
         system_prompt=build_system_prompt(agent_request),
         subagents=subagents,
         skills=toolset["skills"]["orchestrator_agent"],
-        response_format=FinalReviewReport,
+        response_format=None,  # 메인 에이전트는 report-agent를 호출해 결과를 얻음
         name="orchestrator",
     )
 
@@ -186,17 +197,22 @@ def build_system_prompt(agent_request: Dict[str, Any]) -> str:
 
 운영 규칙:
 1. 시작 시 문서 상태를 확인한다.
-2. 시나리오는 순차 실행한다.
-3. 직접 세부 분석을 오래 수행하지 말고 반드시 시나리오별 SubAgent에 위임한다.
-4. SC-001/basic_quality는 basic-quality-agent에 위임한다.
-5. SC-002/traceability는 traceability-agent에 위임한다.
-6. SC-003/ui_match는 ui-match-agent에 위임한다.
-7. SC-004/coverage는 coverage-agent에 위임한다.
-8. 문서가 애매하거나 판단 근거가 부족하면 qa-agent로 확인 질문을 생성한다.
-9. 동일 Tool 반복 호출은 피하고, 불확실한 내용은 확정 판단으로 공유하지 않는다.
-10. 모든 시나리오 결과가 모이면 report-agent로 최종 보고서를 통합한다.
-11. report-agent는 반드시 get_subagent_outputs로 저장된 서브에이전트 결과를 읽고, score/findings/warnings/recommendations를 변경하지 않고 사용해야 한다.
-12. 최종 응답은 반드시 구조화된 보고서로 반환한다.
+2. 시나리오는 순차 실행한다. scenario_order에 따라 하나씩 subagent를 호출하라.
+3. 각 시나리오 완료 후 다음 시나리오를 실행하라.
+4. 직접 세부 분석을 오래 수행하지 말고 반드시 시나리오별 SubAgent에 위임한다.
+5. SC-001/basic_quality는 basic-quality-agent에 위임한다.
+6. SC-002/traceability는 traceability-agent에 위임한다.
+7. SC-003/ui_match는 ui-match-agent에 위임한다.
+8. SC-004/coverage는 coverage-agent에 위임한다.
+9. basic_quality, traceability, ui_match SubAgent 실행 직후에는 반드시 self-quality-agent를 호출해 해당 SubAgent가 생성한 문서별 보완본 3개를 검증한다.
+10. coverage-agent는 현재 산출물 기준 누락/추가/분해 권고만 생성하므로 문서별 교정 output을 만들지 않고 self-quality-agent도 호출하지 않는다.
+11. self-quality-agent의 score가 threshold 미만이거나 rerun_required=true이면, self-quality-agent의 correction_guidance를 원 SubAgent 입력에 포함해 해당 시나리오 SubAgent를 1회 재실행한다. 단, coverage는 재실행/교정 검증 대상에서 제외한다.
+12. 원 SubAgent를 재실행한 경우 다시 self-quality-agent를 호출해 재검증한다. 동일 시나리오의 재실행은 최대 1회로 제한한다.
+13. 모든 교정 대상 SubAgent와 self-quality-agent 검증이 끝난 뒤에만 report-agent로 최종 보고서를 통합한다.
+14. 문서가 애매하거나 판단 근거가 부족하면 qa-agent로 확인 질문을 생성한다.
+15. 동일 Tool 반복 호출은 피하고, 불확실한 내용은 확정 판단으로 공유하지 않는다.
+16. report-agent는 반드시 get_subagent_outputs로 저장된 서브에이전트 결과를 읽고, score와 주요 findings/warnings/recommendations를 사용해야 한다. 단, 각 목록은 최대 8개만 최종 응답에 포함한다.
+17. 최종 응답은 반드시 구조화된 보고서로 반환한다.
 """
 
 
@@ -215,8 +231,14 @@ def build_task_prompt(agent_request: Dict[str, Any]) -> str:
 실행 시나리오 순서:
 {ordered}
 
-반드시 저장된 서브에이전트 결과의 시나리오별 요약, 점수, findings, warnings, recommendations 를 그대로 반영하고,
-마지막에는 전체 점수와 우선순위 액션을 포함한 최종 보고서를 반환하라.
+반드시 시나리오를 이 순서대로 하나씩 실행하라. 
+먼저 basic_quality를 실행하라. basic_quality가 완료되면 traceability를 실행하라. traceability가 완료되면 ui_match를 실행하라. ui_match가 완료되면 coverage를 실행하라. 
+모든 시나리오가 완료된 후 report-agent로 최종 보고서를 생성하라.
+basic_quality, traceability, ui_match 실행 후에는 self-quality-agent로 문서별 보완본을 검증하라.
+coverage는 현재 산출물 기준 누락/추가/분해 권고만 생성하므로 문서별 교정 output과 self-quality-agent 검증을 수행하지 마라.
+self-quality-agent가 rerun_required=true를 반환하면 correction_guidance를 포함해 원 SubAgent를 최대 1회 재실행한 뒤 다시 검증하라. 단, coverage는 재실행/교정 검증 대상에서 제외한다.
+반드시 저장된 서브에이전트 결과의 시나리오별 요약, 점수, 주요 findings, 주요 warnings, 주요 recommendations 를 반영하고,
+각 findings/warnings/recommendations 목록은 최대 8개로 제한하라.
 """
 
 
@@ -321,9 +343,14 @@ def load_subagent_reports(run_id: str) -> Dict[str, Dict[str, Any]]:
             continue
         if not isinstance(payload, dict):
             continue
+        if payload.get("load_error"):
+            continue
         scenario_key = normalize_scenario_key(payload.get("scenario_key") or file_path.stem)
+        if scenario_key not in {"basic_quality", "traceability", "ui_match", "coverage"}:
+            scenario_key = normalize_scenario_key(file_path.stem)
         if not scenario_key:
             continue
+        payload["scenario_key"] = scenario_key
         payload.setdefault("artifact_path", str(file_path))
         reports[scenario_key] = payload
     return reports
@@ -337,10 +364,29 @@ def normalize_scenario_key(value: str) -> str:
     raw_value = raw_value.replace("-", "_").lower()
     aliases = {
         "basic_quality_agent": "basic_quality",
+        "basic_quality": "basic_quality",
+        "basic-quality-agent": "basic_quality",
+        "basic-quality": "basic_quality",
+        "sc_001": "basic_quality",
+        "sc001": "basic_quality",
         "traceability_agent": "traceability",
+        "traceability": "traceability",
+        "traceability-agent": "traceability",
+        "sc_002": "traceability",
+        "sc002": "traceability",
         "ui_match_agent": "ui_match",
+        "ui_match": "ui_match",
+        "ui-match-agent": "ui_match",
+        "ui-match": "ui_match",
+        "sc_003": "ui_match",
+        "sc003": "ui_match",
         "coverage_agent": "coverage",
+        "coverage": "coverage",
+        "coverage-agent": "coverage",
         "coverage_review_agent": "coverage",
+        "coverage-review-agent": "coverage",
+        "sc_004": "coverage",
+        "sc004": "coverage",
     }
     return aliases.get(raw_value, raw_value)
 
@@ -349,9 +395,9 @@ def to_scenario_report(scenario_key: str, source: Dict[str, Any]) -> Dict[str, A
     """서브에이전트 결과를 FinalReviewReport의 ScenarioReport 형태로 변환합니다."""
     score = source.get("score")
     score = score if isinstance(score, int) else 0
-    findings = list(source.get("findings") or [])
-    warnings = list(source.get("warnings") or [])
-    recommendations = list(source.get("recommendations") or [])
+    findings = limit_items(list(source.get("findings") or []), 8)
+    warnings = limit_items(list(source.get("warnings") or []), 8)
+    recommendations = limit_items(list(source.get("recommendations") or []), 8)
     status = source.get("status") or infer_status(score, findings)
     return {
         "scenario_key": scenario_key,
@@ -363,6 +409,13 @@ def to_scenario_report(scenario_key: str, source: Dict[str, Any]) -> Dict[str, A
         "warnings": warnings,
         "recommendations": recommendations,
     }
+
+
+def limit_items(items: List[Any], limit: int) -> List[Any]:
+    """긴 결과 목록이 모델/화면 컨텍스트를 과도하게 키우지 않도록 제한합니다."""
+    if len(items) <= limit:
+        return items
+    return [*items[:limit], f"... 외 {len(items) - limit}건 생략"]
 
 
 def infer_status(score: int, findings: List[str]) -> str:
@@ -454,65 +507,95 @@ def stream_agent_and_build_result(
         on_stream_event,
     )
 
-    for chunk in agent.stream(
-        {"messages": [{"role": "user", "content": task}]},
-        stream_mode=["updates", "values"],
-        subgraphs=True,
-        version="v2",
-    ):
-        if not isinstance(chunk, dict):
-            continue
+    try:
+        for chunk in agent.stream(
+            {"messages": [{"role": "user", "content": task}]},
+            stream_mode=["updates", "values"],
+            subgraphs=True,
+            version="v2",
+        ):
+            if not isinstance(chunk, dict):
+                continue
 
-        chunk_type = str(chunk.get("type") or "")
-        namespace = tuple(str(item) for item in (chunk.get("ns") or ()))
-        data = chunk.get("data") or {}
-
-        if chunk_type == "values":
-            if isinstance(data, dict):
-                latest_state = data
-                merge_state_into_raw_result(raw_result, data, seen_messages)
-            continue
-
-        if chunk_type != "updates" or not isinstance(data, dict):
-            continue
-
-        if not namespace and not main_status_sent:
-            emit_stream_event(
-                {
-                    "kind": "status",
-                    "message": "Main Agent가 점검 순서를 조율하고 있습니다.",
-                    "progress": build_progress_value(total_units, completed_units, phase="running"),
-                },
-                on_stream_event,
+            chunk_type = str(chunk.get("type") or "")
+            namespace = tuple(str(item) for item in (chunk.get("ns") or ()))
+            data = chunk.get("data") or {}
+            print(
+                "[STREAM_CHUNK] "
+                + json.dumps(
+                    {
+                        "type": chunk_type,
+                        "namespace": namespace,
+                        "data_keys": list(data.keys()) if isinstance(data, dict) else [],
+                    },
+                    ensure_ascii=False,
+                    default=str,
+                ),
+                flush=True,
             )
-            main_status_sent = True
 
-        if not namespace:
-            process_main_agent_updates(
+            if chunk_type == "values":
+                if isinstance(data, dict):
+                    latest_state = data
+                    merge_state_into_raw_result(raw_result, data, seen_messages)
+                continue
+
+            if chunk_type != "updates" or not isinstance(data, dict):
+                continue
+
+            if not namespace and not main_status_sent:
+                emit_stream_event(
+                    {
+                        "kind": "status",
+                        "message": "Main Agent가 점검 순서를 조율하고 있습니다.",
+                        "progress": build_progress_value(total_units, completed_units, phase="running"),
+                    },
+                    on_stream_event,
+                )
+                main_status_sent = True
+
+            if not namespace:
+                process_main_agent_updates(
+                    data=data,
+                    raw_result=raw_result,
+                    seen_messages=seen_messages,
+                    seen_task_call_ids=seen_task_call_ids,
+                    seen_completed_task_call_ids=seen_completed_task_call_ids,
+                    active_subagents=active_subagents,
+                    completed_units=completed_units,
+                    total_units=total_units,
+                    on_stream_event=on_stream_event,
+                )
+                continue
+
+            process_subagent_updates(
+                namespace=namespace,
                 data=data,
                 raw_result=raw_result,
                 seen_messages=seen_messages,
-                seen_task_call_ids=seen_task_call_ids,
-                seen_completed_task_call_ids=seen_completed_task_call_ids,
+                seen_subagent_running=seen_subagent_running,
+                seen_tool_call_ids=seen_tool_call_ids,
                 active_subagents=active_subagents,
                 completed_units=completed_units,
                 total_units=total_units,
                 on_stream_event=on_stream_event,
             )
-            continue
-
-        process_subagent_updates(
-            namespace=namespace,
-            data=data,
-            raw_result=raw_result,
-            seen_messages=seen_messages,
-            seen_subagent_running=seen_subagent_running,
-            seen_tool_call_ids=seen_tool_call_ids,
-            active_subagents=active_subagents,
-            completed_units=completed_units,
-            total_units=total_units,
-            on_stream_event=on_stream_event,
+    except Exception as error:
+        print(
+            "[STREAM_ERROR] "
+            + json.dumps(
+                {
+                    "error_type": error.__class__.__name__,
+                    "error": str(error),
+                    "active_subagents": active_subagents,
+                    "completed_units": sorted(completed_units),
+                },
+                ensure_ascii=False,
+                default=str,
+            ),
+            flush=True,
         )
+        raise
 
     if latest_state:
         merge_state_into_raw_result(raw_result, latest_state, seen_messages)
@@ -553,18 +636,32 @@ def process_main_agent_updates(
                     args.get("subagent_type") or args.get("agent_type") or args.get("subagent_name")
                 )
                 meta = build_subagent_meta(subagent_type)
+                target_label = infer_self_quality_target_label(args) if subagent_type == "self-quality-agent" else ""
+                if target_label:
+                    meta["label"] = f"{target_label} 자가 교정 점검"
+                is_repeat = bool(
+                    meta.get("counts_progress", True)
+                    and str(meta.get("progress_key")) in completed_units
+                )
+                meta["is_repeat"] = is_repeat
                 active_subagents[task_call_id] = meta
                 seen_task_call_ids.add(task_call_id)
+                start_phase = "rerun_started" if is_repeat else "started"
+                start_message = (
+                    f"{meta['label']} 재점검을 시작했습니다."
+                    if is_repeat
+                    else f"{meta['label']}을 시작했습니다."
+                )
 
                 emit_stream_event(
                     {
                         "kind": "status",
-                        "message": f"{meta['label']}을 시작했습니다.",
+                        "message": start_message,
                         "progress": build_progress_value(
                             total_units,
                             completed_units,
                             meta=meta,
-                            phase="started",
+                            phase=start_phase,
                         ),
                     },
                     on_stream_event,
@@ -583,18 +680,28 @@ def process_main_agent_updates(
             meta = active_subagents.get(task_call_id, build_subagent_meta(""))
             seen_completed_task_call_ids.add(task_call_id)
 
-            if meta.get("counts_progress", True):
+            was_already_completed = bool(
+                meta.get("counts_progress", True)
+                and str(meta.get("progress_key")) in completed_units
+            )
+            if meta.get("counts_progress", True) and not was_already_completed:
                 completed_units.add(str(meta["progress_key"]))
+            complete_phase = "rerun_completed" if was_already_completed else "completed"
+            complete_message = (
+                f"{meta['label']} 재점검이 완료되었습니다."
+                if was_already_completed
+                else f"{meta['label']}이 완료되었습니다."
+            )
 
             emit_stream_event(
                 {
                     "kind": "success",
-                    "message": f"{meta['label']}이 완료되었습니다.",
+                    "message": complete_message,
                     "progress": build_progress_value(
                         total_units,
                         completed_units,
                         meta=meta,
-                        phase="completed",
+                        phase=complete_phase,
                     ),
                 },
                 on_stream_event,
@@ -620,15 +727,22 @@ def process_subagent_updates(
 
     if task_call_id not in seen_subagent_running:
         seen_subagent_running.add(task_call_id)
+        is_repeat = bool(meta.get("is_repeat"))
+        running_phase = "rerun_running" if is_repeat else "running"
+        running_message = (
+            f"{meta['label']} 재점검을 수행하고 있습니다."
+            if is_repeat
+            else f"{meta['label']}이 문서를 분석하고 있습니다."
+        )
         emit_stream_event(
             {
                 "kind": "status",
-                "message": f"{meta['label']}이 문서를 분석하고 있습니다.",
+                "message": running_message,
                 "progress": build_progress_value(
                     total_units,
                     completed_units,
                     meta=meta,
-                    phase="running",
+                    phase=running_phase,
                 ),
             },
             on_stream_event,
@@ -653,15 +767,22 @@ def process_subagent_updates(
                     continue
 
                 seen_tool_call_ids.add(dedupe_key)
+                is_repeat = bool(meta.get("is_repeat"))
+                tool_phase = "rerun_tool" if is_repeat else "tool"
+                tool_message = (
+                    f"{meta['label']} 재점검에서 {get_tool_display_name(tool_name)}를 사용하고 있습니다."
+                    if is_repeat
+                    else f"{meta['label']}이 {get_tool_display_name(tool_name)}를 사용하고 있습니다."
+                )
                 emit_stream_event(
                     {
                         "kind": "status",
-                        "message": f"{meta['label']}이 {get_tool_display_name(tool_name)}를 사용하고 있습니다.",
+                        "message": tool_message,
                         "progress": build_progress_value(
                             total_units,
                             completed_units,
                             meta=meta,
-                            phase="tool",
+                            phase=tool_phase,
                         ),
                     },
                     on_stream_event,
@@ -822,6 +943,10 @@ def normalize_subagent_type(value: Any) -> str:
         "ui-match": "ui-match-agent",
         "coverage-agent": "coverage-agent",
         "coverage": "coverage-agent",
+        "self-quality-agent": "self-quality-agent",
+        "self-quality": "self-quality-agent",
+        "self_quality_agent": "self-quality-agent",
+        "self_quality": "self-quality-agent",
         "report-agent": "report-agent",
         "report": "report-agent",
         "qa-agent": "qa-agent",
@@ -847,6 +972,26 @@ def build_subagent_meta(subagent_type: str) -> Dict[str, Any]:
         "progress_key": defaults["progress_key"],
         "counts_progress": defaults["counts_progress"],
     }
+
+
+def infer_self_quality_target_label(args: Dict[str, Any]) -> str:
+    """자가 교정 점검이 어떤 시나리오를 검증하는지 task 인자에서 추정합니다."""
+    raw_text = json.dumps(args, ensure_ascii=False, default=str).lower().replace("-", "_")
+    targets = [
+        ("basic_quality", "기초 품질"),
+        ("basic_quality_agent", "기초 품질"),
+        ("sc_001", "기초 품질"),
+        ("traceability", "문서 연결성"),
+        ("traceability_agent", "문서 연결성"),
+        ("sc_002", "문서 연결성"),
+        ("ui_match", "기능-화면 일치"),
+        ("ui_match_agent", "기능-화면 일치"),
+        ("sc_003", "기능-화면 일치"),
+    ]
+    for token, label in targets:
+        if token in raw_text:
+            return label
+    return ""
 
 
 def find_active_subagent(
@@ -881,16 +1026,22 @@ def build_progress_value(
         "started": 0.20,
         "running": 0.45,
         "tool": 0.72,
+        "rerun_started": 0.26,
+        "rerun_running": 0.32,
+        "rerun_tool": 0.38,
+        "rerun_completed": 0.42,
     }
 
     if phase == "completed":
         if meta and not meta.get("counts_progress", True):
-            return min((completed_count + 0.9) / total_units, 0.98)
+            return min((completed_count + 0.16) / total_units, 0.98)
         return min(completed_count / total_units, 1.0)
+    if phase == "rerun_completed":
+        return min((completed_count + phase_weights["rerun_completed"]) / total_units, 0.98)
 
     weight = phase_weights.get(phase, 0.45)
     if meta and not meta.get("counts_progress", True):
-        weight = min(weight, 0.35)
+        weight = min(weight, 0.12)
 
     return min((completed_count + weight) / total_units, 0.98)
 
@@ -900,10 +1051,15 @@ def emit_stream_event(
     on_stream_event: Callable[[Dict[str, Any]], None] | None,
 ) -> None:
     """사용자 스트림 이벤트를 콜백과 로그로 동시에 전달합니다."""
+    print(
+        "[STREAM_EVENT] "
+        + json.dumps(event, ensure_ascii=False, default=str),
+        flush=True,
+    )
     if on_stream_event is not None:
         on_stream_event(event)
 
-    log(event.get("message", "Agent가 작업 중입니다."), "info")
+    #log(event.get("message", "Agent가 작업 중입니다."), "info")
 
 
 def save_orchestrator_result(run_id: str, result: Dict[str, Any]) -> Dict[str, Any]:

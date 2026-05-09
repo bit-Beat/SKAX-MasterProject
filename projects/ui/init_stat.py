@@ -13,6 +13,15 @@ DEFAULT_SESSION_STATE = {
     #"demo_mode": True,  # 샘플 결과 사용 여부
     "extra_request": "핵심 이슈를 우선순위 기준으로 보여줘.",  # 사용자 추가 요청 문구
     "has_run": False,  # 점검 실행 여부
+    "run_integrated_check_requested": False,  # 통합 점검 실행 예약 여부
+    "agent_stream_state": {  # 우측 Agent 진행 패널에 마지막 실행 로그를 유지
+        "kind": "idle",
+        "message": "통합 점검을 실행하면 Main Agent와 서브에이전트 진행 상황이 여기에 표시됩니다.",
+        "progress": 0.0,
+        "logs": [],
+    },
+    "post_run_notice": "",
+    "show_completion_modal": False,
     
     "prepared_payload": {},  # 업로드 문서를 정리한 JSON payload
     "prepared_payload_path": "",  # JSON payload 저장 경로

@@ -5,6 +5,7 @@ allowed-tools:
   - get_scenario_definition
   - run_coverage_review
   - persist_subagent_output
+  - persist_corrected_document_outputs
 metadata:
   author: skax-master-project
   version: "0.2"
@@ -25,6 +26,7 @@ metadata:
 - 핵심 목표: 기능 정의서 완성도 극대화
 - 전제 조건: 요구사항 정의서와 기능 정의서 존재
 - 응답 방식: 도구 결과 기반의 구조화 JSON
+- `scenario_key`는 반드시 `coverage`로 반환한다. `SC-004`, `sc_004`, `coverage_agent`는 사용하지 않는다.
 
 ## 2. Scope Boundary
 
@@ -87,6 +89,7 @@ UI 설계서는 보조 근거일 수 있으나 SC-004의 핵심 판단 대상은
 4. 요구사항 대비 기능 누락, 과잉, 분해 부족을 구분해 정리한다.
 5. 보완 제안은 기능 정의서에 추가하거나 수정할 수 있는 문장으로 작성한다.
 6. 필요한 경우 `persist_subagent_output("coverage", "coverage_agent", payload_json)`로 결과를 저장한다.
+7. `persist_corrected_document_outputs("coverage", "coverage_agent", payload_json)`로 요구사항정의서, 기능정의서, UI설계서 보완본 3개를 생성한다.
 
 ## 6. Validation Rules
 
@@ -167,6 +170,7 @@ SC-004는 요구사항 의미와 기능 정의 의미를 비교한다.
 3. 기능 보완 제안은 요구사항 ID 또는 기능ID와 연결해 작성한다.
 4. UI 버튼 불일치는 SC-003 범위로 넘긴다.
 5. 저장이 요구되면 `persist_subagent_output`으로 JSON 결과를 저장한다.
+6. 저장 후 `persist_corrected_document_outputs`로 문서별 보완본 JSON을 생성한다.
 
 ## 10. Example Report
 

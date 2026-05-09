@@ -1,0 +1,37 @@
+{
+  "scenario_key": "basic_quality",
+  "summary": "SKILL.md 기준 기초 품질을 점검했습니다. 주요 이슈는 요구사항 Owner 누락, 화면ID/기능ID 형식 오류, 상태/우선순위 누락 등입니다. correction_guidance의 4개 항목을 모두 반영해 보완본을 생성했습니다.",
+  "score": 67,
+  "findings": [
+    "[REQ-ID-001] 요구사항 정의서 9행: 요구사항 ID 'REQ_006'는 REQ-001 형식이어야 합니다. 권장 수정값: 'REQ-006'",
+    "[REQ-ID-001] 요구사항 정의서 15행: 요구사항 ID 'RQ-012'는 REQ-001 형식이어야 합니다. 권장 수정값: 'REQ-012'",
+    "[REQ-OWNER-001] 요구사항 정의서 18행: 요청자(요구사항 Owner)가 누락되었습니다.",
+    "[FUNC-STATUS-001] 기능 정의서 8행: 상태가 누락되었습니다.",
+    "[FUNC-UI-ID-001] 기능 정의서 9행: 화면ID 'UI-004-TEMP'는 UI-001 형식이어야 합니다. 권장 수정값: 'UI-004'",
+    "[FUNC-UI-ID-001] 기능 정의서 13행: 화면ID 'UI-007-EX'는 UI-001 형식이어야 합니다. 권장 수정값: 'UI-007'",
+    "[FUNC-UI-ID-001] 기능 정의서 21행: 화면ID 'UI-017-DEL'는 UI-001 형식이어야 합니다. 권장 수정값: 'UI-017'",
+    "... 외 8건 생략"
+  ],
+  "warnings": [
+    "[G-TYPO-001] 요구사항 정의서 9행: 요구사항명 '설비 상태 모니터링ㄱ'에 단독 한글 자모가 포함되어 있습니다.",
+    "[G-TYPO-002] 요구사항 정의서 9행 '요구사항명': '모니터링ㄱ'은 '모니터링'로 수정 권장됩니다.",
+    "[G-TYPO-002] 요구사항 정의서 19행 '요구사항명': '결괏'은 '결과'로 수정 권장됩니다."
+  ],
+  "recommendations": [
+    "상태가 누락되었습니다. [신규, 추가, 수정, 삭제, 진행중, 완료, 보류] 중 하나를 선택하세요.",
+    "우선순위가 1~5 범위를 벗어났습니다. 1~5의 정수로 입력하세요.",
+    "기능ID가 REQ-###-F## 형식이 아닙니다.",
+    "위 항목들을 수정한 후 재검사를 수행하세요.",
+    "요구사항 ID가 REQ-### 형식이 아닙니다.",
+    "화면ID가 UI-### 형식이 아닙니다.",
+    "단독 한글 자모가 감지되었습니다. 제거하거나 수정하세요.",
+    "... 외 2건 생략"
+  ],
+  "artifact_path": null,
+  "corrected_document_paths": [
+    "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260509_203119\\basic_quality\\basic_quality_agent_output_requirement_definition.json",
+    "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260509_203119\\basic_quality\\basic_quality_agent_output_feature_definition.json",
+    "C:\\Users\\ehwns\\OneDrive\\문서\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260509_203119\\basic_quality\\basic_quality_agent_output_ui_design.json"
+  ],
+  "agent_name": "basic_quality_agent"
+}

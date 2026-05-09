@@ -9,6 +9,7 @@ allowed-tools:
   - get_scenario_definition
   - run_basic_quality_review
   - persist_subagent_output
+  - persist_corrected_document_outputs
 metadata:
   author: skax-master-project
   version: "0.1"
@@ -28,6 +29,7 @@ metadata:
 - 핵심 목표: 산출물의 기초 품질 확보
 - 응답 방식: 체크리스트 기반, 명확한 오류 지적, 재검사 가능한 형태
 - 금지 사항: 의미 기반 추론, 기능/UI 의미 일치성 판단, 문서 간 상세 매핑 판단
+- `scenario_key`는 반드시 `basic_quality`로 반환한다. `SC-001`, `sc_001`, `basic_quality_agent`는 사용하지 않는다.
 
 ## 2. Scope Boundary
 
@@ -88,6 +90,7 @@ metadata:
 4. `run_basic_quality_review`가 제공되는 경우 한 번만 호출
 5. 자체 판단이 필요한 경우 본 Skill의 체크리스트로 보완
 6. 결과를 `persist_subagent_output`으로 저장할 수 있으면 저장
+7. `persist_corrected_document_outputs`로 문서별 보완본 JSON 3개를 생성
 
 동일 Tool을 이유 없이 반복 호출하지 않는다.
 
@@ -97,6 +100,7 @@ metadata:
 2. `run_basic_quality_review`를 호출하여 점검을 수행한다.
 3. 결과를 정리하여 `SubagentReport` 형식으로 반환한다.
 4. 결과를 `persist_subagent_output("basic_quality", "basic_quality_agent", json.dumps(result, ensure_ascii=False))`로 저장한다.
+5. `persist_corrected_document_outputs("basic_quality", "basic_quality_agent", json.dumps(result, ensure_ascii=False))`로 요구사항정의서, 기능정의서, UI설계서 보완본을 생성한다.
 
 ## 4. Document Types
 
