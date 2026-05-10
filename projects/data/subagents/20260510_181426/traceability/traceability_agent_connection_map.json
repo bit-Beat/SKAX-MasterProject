@@ -1,0 +1,1375 @@
+{
+  "run_id": "20260510_181426",
+  "scenario_key": "traceability",
+  "artifact_type": "traceability_connection_map",
+  "summary": {
+    "requirement_row_count": 24,
+    "feature_row_count": 33,
+    "ui_row_count": 29,
+    "requirement_count": 24,
+    "feature_count": 33,
+    "linked_requirement_count": 24,
+    "missing_requirement_to_feature_count": 0,
+    "requirement_to_feature_coverage_rate": 100.0,
+    "linked_feature_count": 30,
+    "missing_feature_to_ui_count": 3,
+    "feature_to_ui_coverage_rate": 90.9
+  },
+  "requirement_to_feature": [
+    {
+      "requirement_id": "REQ-001",
+      "requirement_name": "사용자 로그인 및 권한 인증",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 2,
+      "feature_ids": [
+        "REQ-001-F01",
+        "REQ-001-F02"
+      ],
+      "feature_names": [
+        "ID/PW 로그인",
+        "SSO 로그인"
+      ],
+      "screen_ids": [
+        "UI-001",
+        "UI-002"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-002",
+      "requirement_name": "작업지시 목록 조회",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 2,
+      "feature_ids": [
+        "REQ-002-F01",
+        "REQ-002-F02"
+      ],
+      "feature_names": [
+        "작업지시 목록 조회",
+        "작업지시 필터 및 정렬"
+      ],
+      "screen_ids": [
+        "UI-003"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-003",
+      "requirement_name": "작업지시 상세 조회",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "feature_count": 1,
+      "feature_ids": [
+        "MES 작업지시 REQ-003 작업지시 상세 조회 박서준 신규 2026-03-03 2026-03-06 작업 전 지시 상세 조건 확인 작업지시번호 선택 시 품목, 수량, 공정조건, 특기사항 상세 표시 목록 선택 → 상세 팝업 표시 작업지시 상세 팝업 조회 권한 검증 상세 팝업 2초 이내 작업지시 상세, BOM, 공정조건"
+      ],
+      "feature_names": [
+        "작업지시 상세 조회"
+      ],
+      "screen_ids": [
+        "UI-003"
+      ],
+      "action": "기능 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-004",
+      "requirement_name": "작업 실적 등록",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 2,
+      "feature_ids": [
+        "REQ-004-F01",
+        "REQ-004-F02"
+      ],
+      "feature_names": [
+        "작업 실적 등록",
+        "작업 실적 임시저장"
+      ],
+      "screen_ids": [
+        "UI-004",
+        "UI-004-TEMP"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-005",
+      "requirement_name": "자재 바코드 스캔 투입",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-005-F01"
+      ],
+      "feature_names": [
+        "자재 바코드 스캔 투입"
+      ],
+      "screen_ids": [
+        "UI-005"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ_006",
+      "requirement_name": "설비 상태 모니터링ㄱ",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "feature_count": 1,
+      "feature_ids": [
+        "MES 설비 REQ_006 설비 상태 모니터링ㄱ 한지훈 신규 2026-03-06 2026-03-09 설비 이상 조기 인지 설비 가동/비가동/알람 상태를 실시간 조회 설비 상태 수집 → 상태 표시 설비 모니터링 화면 설비 권한별 조회 범위 제한 상태 갱신 주기 5초 이내 설비 상태, 알람 이력 의도적 ID 형식 및 오탈자 포함"
+      ],
+      "feature_names": [
+        "설비 상태 모니터링ㄱ"
+      ],
+      "screen_ids": [
+        "UI-006"
+      ],
+      "action": "기능 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-007",
+      "requirement_name": "품질 검사 결과 등록",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 2,
+      "feature_ids": [
+        "REQ-007-F01"
+      ],
+      "feature_names": [
+        "품질 검사 결과 등록",
+        "품질 검사 결과 예외등록"
+      ],
+      "screen_ids": [
+        "UI-007",
+        "UI-007-EX"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-008",
+      "requirement_name": "불량 코드 선택 및 원인 등록",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-008-F01"
+      ],
+      "feature_names": [
+        "불량 코드 선택"
+      ],
+      "screen_ids": [
+        "UI-008"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-009",
+      "requirement_name": "이상 발생 알림 및 이메일 통지",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "feature_count": 1,
+      "feature_ids": [
+        "MES 알림 REQ-009 이상 발생 알림 및 이메일 통지 정하늘 신규 2026-03-09 2026-03-12 장애 대응 시간 단축 설비 알람, 품질 이상, 인터페이스 실패 발생 시 담당자에게 알림/이메일 발송 이벤트 감지 → 수신자 식별 → 알림 발송 알림 이력 화면 수신자 권한 및 개인정보 보호 이벤트 발생 후 30초 이내 알림 이력, 사용자 연락처"
+      ],
+      "feature_names": [
+        "이상 발생 알림 및 이메일 통지"
+      ],
+      "screen_ids": [
+        "UI-009"
+      ],
+      "action": "기능 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-010",
+      "requirement_name": "생산 실적 대시보드 조회",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-010-F01"
+      ],
+      "feature_names": [
+        "생산 실적 대시보드 조회"
+      ],
+      "screen_ids": [
+        "UI-010"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-011",
+      "requirement_name": "작업지시 결과 엑셀 다운로드",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-011-F01"
+      ],
+      "feature_names": [
+        "작업지시 결과 엑셀 다운로드"
+      ],
+      "screen_ids": [
+        "UI-011"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "RQ-012",
+      "requirement_name": "작업지시 취소 승인",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "feature_count": 1,
+      "feature_ids": [
+        "MES 승인 RQ-012 작업지시 취소 승인 문태호 신규 2026-03-12 2026-03-15 임의 취소 방지 작업자가 취소 요청한 작업지시를 리더가 승인/반려 취소 요청 → 승인자 확인 → 승인/반려 취소 승인 화면 승인자 권한 검증 승인 처리 2초 이내 취소 요청 이력 의도적 요구사항 ID 접두어 오류"
+      ],
+      "feature_names": [
+        "작업지시 취소 승인"
+      ],
+      "screen_ids": [
+        "UI-012"
+      ],
+      "action": "기능 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-013",
+      "requirement_name": "설비 비가동 사유 등록",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-013-F01"
+      ],
+      "feature_names": [
+        "설비 비가동 사유 등록"
+      ],
+      "screen_ids": [
+        "UI-013"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-014",
+      "requirement_name": "LOT 추적 조회",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-014-F01"
+      ],
+      "feature_names": [
+        "LOT 추적 조회"
+      ],
+      "screen_ids": [
+        "UI-014"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-015",
+      "requirement_name": "재공 재고 조회",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "feature_count": 1,
+      "feature_ids": [
+        "MES 재고 REQ-015 재공 재고 조회 신규 2026-03-14 2026-03-17 재공 현황 파악 공정/라인/품목별 재공 재고를 조회 조건 선택 → 재공 집계 → 목록 표시 재공 재고 조회 화면 공장/라인 권한 적용 조회 3초 이내 재공 재고, 품목 마스터 요청자 누락"
+      ],
+      "feature_names": [
+        "재공 재고 조회"
+      ],
+      "screen_ids": [
+        "UI-015"
+      ],
+      "action": "기능 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-016",
+      "requirement_name": "출하검사 결괏 확정",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-016-F01"
+      ],
+      "feature_names": [
+        "출하검사 결과 확정"
+      ],
+      "screen_ids": [
+        "UI-016"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-017",
+      "requirement_name": "사용자별 메뉴 권한 관리",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 2,
+      "feature_ids": [
+        "REQ-017-F01",
+        "REQ-017-F02"
+      ],
+      "feature_names": [
+        "메뉴 권한 관리",
+        "사용자 계정 삭제"
+      ],
+      "screen_ids": [
+        "UI-017",
+        "UI-017-DEL"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-018",
+      "requirement_name": "감사 로그 조회",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "feature_count": 1,
+      "feature_ids": [
+        "MES 감사 REQ-018 감사 로그 조회 김도현 신규 2026-03-17 2026-03-20 변경 이력 추적 사용자 주요 행위 로그를 조건별로 조회 조건 선택 → 로그 조회 감사 권한 사용자만 조회 조회 5초 이내 감사 로그 화면 요구사항 누락"
+      ],
+      "feature_names": [
+        "감사 로그 조회"
+      ],
+      "screen_ids": [
+        "UI-018"
+      ],
+      "action": "기능 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-019",
+      "requirement_name": "인터페이스 재처리",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-019-F01"
+      ],
+      "feature_names": [
+        "인터페이스 재처리"
+      ],
+      "screen_ids": [
+        "UI-019"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-020",
+      "requirement_name": "마스터 코드 관리",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-020-F01"
+      ],
+      "feature_names": [
+        "마스터 코드 관리"
+      ],
+      "screen_ids": [
+        "UI-020"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-021",
+      "requirement_name": "모바일 작업 승인",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-021-F01"
+      ],
+      "feature_names": [
+        "모바일 작업 승인"
+      ],
+      "screen_ids": [
+        "UI-021"
+      ],
+      "action": "기능 정의 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-022",
+      "requirement_name": "배치 처리 결과 조회",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "feature_count": 1,
+      "feature_ids": [
+        "MES 배치 REQ-022 배치 처리 결과 조회 유민석 신규 2026-03-21 야간 배치 결과 확인 배치 수행 결과, 성공/실패 건수, 실패 메시지를 조회 배치 종료 → 결과 저장 → 조회 배치 결과 조회 화면 운영자만 조회 조회 3초 이내 배치 결과, 실패 로그 최종수정일자 누락"
+      ],
+      "feature_names": [
+        "배치 처리 결과 조회"
+      ],
+      "screen_ids": [
+        "UI-022"
+      ],
+      "action": "기능 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-023",
+      "requirement_name": "긴급 공지 팝업",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "feature_count": 1,
+      "feature_ids": [
+        "MES 공지 REQ-023 긴급 공지 팝업 정하늘 추가 2026-03-22 2026-03-25 현장 공지 전파 긴급 공지를 등록하면 작업자 로그인 후 팝업으로 표시 공지 등록 → 대상자 식별 → 팝업 노출 공지 등록/팝업 화면 공지 관리자만 등록 로그인 후 1초 이내 표시 공지, 대상 사용자"
+      ],
+      "feature_names": [
+        "긴급 공지 팝업"
+      ],
+      "screen_ids": [
+        "UI-023"
+      ],
+      "action": "기능 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-024",
+      "requirement_name": "생산계획 연계 조회",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "feature_count": 1,
+      "feature_ids": [
+        "REQ-024-F01"
+      ],
+      "feature_names": [
+        "생산계획 연계 조회"
+      ],
+      "screen_ids": [
+        "UI-024"
+      ],
+      "action": "기능 정의 연결 확인"
+    }
+  ],
+  "feature_to_ui": [
+    {
+      "requirement_id": "REQ-001",
+      "feature_id": "REQ-001-F01",
+      "feature_name": "ID/PW 로그인",
+      "screen_id": "UI-001",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-001"
+      ],
+      "ui_names": [
+        "로그인"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-001",
+      "feature_id": "REQ-001-F02",
+      "feature_name": "SSO 로그인",
+      "screen_id": "UI-002",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-002"
+      ],
+      "ui_names": [
+        "SSO 콜백"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-002",
+      "feature_id": "REQ-002-F01",
+      "feature_name": "작업지시 목록 조회",
+      "screen_id": "UI-003",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-003"
+      ],
+      "ui_names": [
+        "작업지시 목록"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-002",
+      "feature_id": "REQ-002-F02",
+      "feature_name": "작업지시 필터 및 정렬",
+      "screen_id": "UI-003",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-003"
+      ],
+      "ui_names": [
+        "작업지시 목록 필터"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-004",
+      "feature_id": "REQ-004-F01",
+      "feature_name": "작업 실적 등록",
+      "screen_id": "UI-004",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-004"
+      ],
+      "ui_names": [
+        "작업 실적 등록"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-004",
+      "feature_id": "REQ-004-F02",
+      "feature_name": "작업 실적 임시저장",
+      "screen_id": "UI-004-TEMP",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-004-TEMP"
+      ],
+      "ui_names": [
+        "작업 실적 임시저장"
+      ],
+      "action": "UI 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-005",
+      "feature_id": "REQ-005-F01",
+      "feature_name": "자재 바코드 스캔 투입",
+      "screen_id": "UI-005",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-005"
+      ],
+      "ui_names": [
+        "자재 바코드 스캔"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-006",
+      "feature_id": "REQ-006-F01",
+      "feature_name": "설비 상태 모니터링",
+      "screen_id": "UI-006",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-006"
+      ],
+      "ui_names": [
+        "설비 상태 모니터링"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-007",
+      "feature_id": "REQ-007-F01",
+      "feature_name": "품질 검사 결과 등록",
+      "screen_id": "UI-007",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "ui_match_count": 2,
+      "ui_screen_ids": [
+        "UI-007",
+        "UI-007-EX"
+      ],
+      "ui_names": [
+        "품질 검사 결과",
+        "품질 검사 결과 예외등록"
+      ],
+      "action": "UI 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-007",
+      "feature_id": "REQ-007-F01",
+      "feature_name": "품질 검사 결과 예외등록",
+      "screen_id": "UI-007-EX",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "ui_match_count": 2,
+      "ui_screen_ids": [
+        "UI-007",
+        "UI-007-EX"
+      ],
+      "ui_names": [
+        "품질 검사 결과",
+        "품질 검사 결과 예외등록"
+      ],
+      "action": "UI 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-008",
+      "feature_id": "REQ-008-F01",
+      "feature_name": "불량 코드 선택",
+      "screen_id": "UI-008",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-008"
+      ],
+      "ui_names": [
+        "불량 코드 선택"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-010",
+      "feature_id": "REQ-010-F01",
+      "feature_name": "생산 실적 대시보드 조회",
+      "screen_id": "UI-010",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-010"
+      ],
+      "ui_names": [
+        "생산 실적 대시보드"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-012",
+      "feature_id": "REQ-012-F01",
+      "feature_name": "작업지시 취소 승인",
+      "screen_id": "UI-012",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-012"
+      ],
+      "ui_names": [
+        "작업지시 취소 승인"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-013",
+      "feature_id": "REQ-013-F01",
+      "feature_name": "설비 비가동 사유 등록",
+      "screen_id": "UI-013",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-013"
+      ],
+      "ui_names": [
+        "비가동 사유 등록"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-014",
+      "feature_id": "REQ-014-F01",
+      "feature_name": "LOT 추적 조회",
+      "screen_id": "UI-014",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "ui_match_count": 2,
+      "ui_screen_ids": [
+        "U-014",
+        "UI-014"
+      ],
+      "ui_names": [
+        "LOT 추적",
+        "LOT 추적 조회"
+      ],
+      "action": "UI 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-016",
+      "feature_id": "REQ-016-F01",
+      "feature_name": "출하검사 결과 확정",
+      "screen_id": "UI-016",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-016"
+      ],
+      "ui_names": [
+        "출하검사 결과 확정"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-017",
+      "feature_id": "REQ-017-F01",
+      "feature_name": "메뉴 권한 관리",
+      "screen_id": "UI-017",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-017"
+      ],
+      "ui_names": [
+        "메뉴 권한 관리"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-017",
+      "feature_id": "REQ-017-F02",
+      "feature_name": "사용자 계정 삭제",
+      "screen_id": "UI-017-DEL",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-017-DEL"
+      ],
+      "ui_names": [
+        "사용자 계정 삭제"
+      ],
+      "action": "UI 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-019",
+      "feature_id": "REQ-019-F01",
+      "feature_name": "인터페이스 재처리",
+      "screen_id": "UI-019",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-019"
+      ],
+      "ui_names": [
+        "인터페이스 재처리"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-020",
+      "feature_id": "REQ-020-F01",
+      "feature_name": "마스터 코드 관리",
+      "screen_id": "UI-020",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-020"
+      ],
+      "ui_names": [
+        "마스터 코드 관리"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-999",
+      "feature_id": "REQ-999-F01",
+      "feature_name": "테스트용 관리자 삭제 기능",
+      "screen_id": "UI-D00Z",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-D00Z"
+      ],
+      "ui_names": [
+        "관리자 강제 삭제"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-021",
+      "feature_id": "REQ-021-F01",
+      "feature_name": "모바일 작업 승인",
+      "screen_id": "UI-021",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-021"
+      ],
+      "ui_names": [
+        "모바일 작업 승인"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-024",
+      "feature_id": "REQ-024-F01",
+      "feature_name": "생산계획 연계 조회",
+      "screen_id": "UI-024",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-024"
+      ],
+      "ui_names": [
+        "생산계획 조회"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-025",
+      "feature_id": "F-025",
+      "feature_name": "구버전 작업지시 삭제",
+      "screen_id": "UI-025",
+      "status": "corrected",
+      "status_label": "보완됨",
+      "correction_applied": true,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-025"
+      ],
+      "ui_names": [
+        "구버전 작업지시 삭제"
+      ],
+      "action": "UI 후보 추가됨, 담당자 검토 필요"
+    },
+    {
+      "requirement_id": "REQ-011",
+      "feature_id": "REQ-011-F01",
+      "feature_name": "작업지시 결과 엑셀 다운로드",
+      "screen_id": "UI-011",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-011"
+      ],
+      "ui_names": [
+        "작업지시 엑셀 다운로드"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-003",
+      "feature_id": "MES 작업지시 REQ-003 작업지시 상세 조회 박서준 신규 2026-03-03 2026-03-06 작업 전 지시 상세 조건 확인 작업지시번호 선택 시 품목, 수량, 공정조건, 특기사항 상세 표시 목록 선택 → 상세 팝업 표시 작업지시 상세 팝업 조회 권한 검증 상세 팝업 2초 이내 작업지시 상세, BOM, 공정조건",
+      "feature_name": "작업지시 상세 조회",
+      "screen_id": "UI-003",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 2,
+      "ui_screen_ids": [
+        "UI-003"
+      ],
+      "ui_names": [
+        "작업지시 목록",
+        "작업지시 목록 필터"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-009",
+      "feature_id": "MES 알림 REQ-009 이상 발생 알림 및 이메일 통지 정하늘 신규 2026-03-09 2026-03-12 장애 대응 시간 단축 설비 알람, 품질 이상, 인터페이스 실패 발생 시 담당자에게 알림/이메일 발송 이벤트 감지 → 수신자 식별 → 알림 발송 알림 이력 화면 수신자 권한 및 개인정보 보호 이벤트 발생 후 30초 이내 알림 이력, 사용자 연락처",
+      "feature_name": "이상 발생 알림 및 이메일 통지",
+      "screen_id": "UI-009",
+      "status": "missing_ui",
+      "status_label": "UI 누락",
+      "correction_applied": false,
+      "ui_match_count": 0,
+      "ui_screen_ids": [],
+      "ui_names": [],
+      "action": "UI 설계서에 화면/기능 매핑 후보를 추가/검토"
+    },
+    {
+      "requirement_id": "REQ-015",
+      "feature_id": "MES 재고 REQ-015 재공 재고 조회 신규 2026-03-14 2026-03-17 재공 현황 파악 공정/라인/품목별 재공 재고를 조회 조건 선택 → 재공 집계 → 목록 표시 재공 재고 조회 화면 공장/라인 권한 적용 조회 3초 이내 재공 재고, 품목 마스터 요청자 누락",
+      "feature_name": "재공 재고 조회",
+      "screen_id": "UI-015",
+      "status": "missing_ui",
+      "status_label": "UI 누락",
+      "correction_applied": false,
+      "ui_match_count": 0,
+      "ui_screen_ids": [],
+      "ui_names": [],
+      "action": "UI 설계서에 화면/기능 매핑 후보를 추가/검토"
+    },
+    {
+      "requirement_id": "REQ-018",
+      "feature_id": "MES 감사 REQ-018 감사 로그 조회 김도현 신규 2026-03-17 2026-03-20 변경 이력 추적 사용자 주요 행위 로그를 조건별로 조회 조건 선택 → 로그 조회 감사 권한 사용자만 조회 조회 5초 이내 감사 로그 화면 요구사항 누락",
+      "feature_name": "감사 로그 조회",
+      "screen_id": "UI-018",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-018"
+      ],
+      "ui_names": [
+        "감사 로그 조회"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-022",
+      "feature_id": "MES 배치 REQ-022 배치 처리 결과 조회 유민석 신규 2026-03-21 야간 배치 결과 확인 배치 수행 결과, 성공/실패 건수, 실패 메시지를 조회 배치 종료 → 결과 저장 → 조회 배치 결과 조회 화면 운영자만 조회 조회 3초 이내 배치 결과, 실패 로그 최종수정일자 누락",
+      "feature_name": "배치 처리 결과 조회",
+      "screen_id": "UI-022",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-022"
+      ],
+      "ui_names": [
+        "배치 결과 조회"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "REQ-023",
+      "feature_id": "MES 공지 REQ-023 긴급 공지 팝업 정하늘 추가 2026-03-22 2026-03-25 현장 공지 전파 긴급 공지를 등록하면 작업자 로그인 후 팝업으로 표시 공지 등록 → 대상자 식별 → 팝업 노출 공지 등록/팝업 화면 공지 관리자만 등록 로그인 후 1초 이내 표시 공지, 대상 사용자",
+      "feature_name": "긴급 공지 팝업",
+      "screen_id": "UI-023",
+      "status": "missing_ui",
+      "status_label": "UI 누락",
+      "correction_applied": false,
+      "ui_match_count": 0,
+      "ui_screen_ids": [],
+      "ui_names": [],
+      "action": "UI 설계서에 화면/기능 매핑 후보를 추가/검토"
+    },
+    {
+      "requirement_id": "REQ_006",
+      "feature_id": "MES 설비 REQ_006 설비 상태 모니터링ㄱ 한지훈 신규 2026-03-06 2026-03-09 설비 이상 조기 인지 설비 가동/비가동/알람 상태를 실시간 조회 설비 상태 수집 → 상태 표시 설비 모니터링 화면 설비 권한별 조회 범위 제한 상태 갱신 주기 5초 이내 설비 상태, 알람 이력 의도적 ID 형식 및 오탈자 포함",
+      "feature_name": "설비 상태 모니터링ㄱ",
+      "screen_id": "UI-006",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-006"
+      ],
+      "ui_names": [
+        "설비 상태 모니터링"
+      ],
+      "action": "UI 설계 연결 확인"
+    },
+    {
+      "requirement_id": "RQ-012",
+      "feature_id": "MES 승인 RQ-012 작업지시 취소 승인 문태호 신규 2026-03-12 2026-03-15 임의 취소 방지 작업자가 취소 요청한 작업지시를 리더가 승인/반려 취소 요청 → 승인자 확인 → 승인/반려 취소 승인 화면 승인자 권한 검증 승인 처리 2초 이내 취소 요청 이력 의도적 요구사항 ID 접두어 오류",
+      "feature_name": "작업지시 취소 승인",
+      "screen_id": "UI-012",
+      "status": "linked",
+      "status_label": "연결됨",
+      "correction_applied": false,
+      "ui_match_count": 1,
+      "ui_screen_ids": [
+        "UI-012"
+      ],
+      "ui_names": [
+        "작업지시 취소 승인"
+      ],
+      "action": "UI 설계 연결 확인"
+    }
+  ],
+  "orphan_references": {
+    "feature_requirement_ids_not_in_requirements": [
+      "REQ-006",
+      "REQ-012",
+      "REQ-025",
+      "REQ-999"
+    ],
+    "ui_requirement_ids_not_in_requirements": [
+      "REQ-006",
+      "REQ-012",
+      "REQ-025",
+      "REQ-999"
+    ],
+    "ui_feature_ids_not_in_features": [
+      "REQ-003-F01",
+      "REQ-018-F01",
+      "REQ-022-F01"
+    ],
+    "ui_screen_ids_not_in_features": [
+      "U-014",
+      "UI-003D"
+    ]
+  },
+  "traceability_changes": [
+    {
+      "document_key": "feature_definition",
+      "document_label": "기능 정의서",
+      "sheet_name": "기능정의서",
+      "row_index": 29,
+      "change_type": "기능 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "요구사항 ID": "REQ-003",
+        "기능ID": "MES 작업지시 REQ-003 작업지시 상세 조회 박서준 신규 2026-03-03 2026-03-06 작업 전 지시 상세 조건 확인 작업지시번호 선택 시 품목, 수량, 공정조건, 특기사항 상세 표시 목록 선택 → 상세 팝업 표시 작업지시 상세 팝업 조회 권한 검증 상세 팝업 2초 이내 작업지시 상세, BOM, 공정조건",
+        "기능명": "작업지시 상세 조회",
+        "요청자": "",
+        "상태": "신규",
+        "설명": "MES 작업지시 REQ-003 작업지시 상세 조회 박서준 신규 2026-03-03 2026-03-06 작업 전 지시 상세 조건 확인 작업지시번호 선택 시 품목, 수량, 공정조건, 특기사항 상세 표시 목록 선택 → 상세 팝업 표시 작업지시 상세 팝업 조회 권한 검증 상세 팝업 2초 이내 작업지시 상세, BOM, 공정조건",
+        "기능": "",
+        "입력": "자가점검 필요",
+        "출력": "자가점검 필요",
+        "예외처리": "",
+        "화면ID": "UI-003",
+        "우선순위": "3",
+        "기타": "traceability-agent 연결 보완 후보"
+      },
+      "reason": "append_feature_candidate"
+    },
+    {
+      "document_key": "feature_definition",
+      "document_label": "기능 정의서",
+      "sheet_name": "기능정의서",
+      "row_index": 30,
+      "change_type": "기능 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "요구사항 ID": "REQ-009",
+        "기능ID": "MES 알림 REQ-009 이상 발생 알림 및 이메일 통지 정하늘 신규 2026-03-09 2026-03-12 장애 대응 시간 단축 설비 알람, 품질 이상, 인터페이스 실패 발생 시 담당자에게 알림/이메일 발송 이벤트 감지 → 수신자 식별 → 알림 발송 알림 이력 화면 수신자 권한 및 개인정보 보호 이벤트 발생 후 30초 이내 알림 이력, 사용자 연락처",
+        "기능명": "이상 발생 알림 및 이메일 통지",
+        "요청자": "",
+        "상태": "신규",
+        "설명": "MES 알림 REQ-009 이상 발생 알림 및 이메일 통지 정하늘 신규 2026-03-09 2026-03-12 장애 대응 시간 단축 설비 알람, 품질 이상, 인터페이스 실패 발생 시 담당자에게 알림/이메일 발송 이벤트 감지 → 수신자 식별 → 알림 발송 알림 이력 화면 수신자 권한 및 개인정보 보호 이벤트 발생 후 30초 이내 알림 이력, 사용자 연락처",
+        "기능": "",
+        "입력": "자가점검 필요",
+        "출력": "자가점검 필요",
+        "예외처리": "",
+        "화면ID": "UI-009",
+        "우선순위": "3",
+        "기타": "traceability-agent 연결 보완 후보"
+      },
+      "reason": "append_feature_candidate"
+    },
+    {
+      "document_key": "feature_definition",
+      "document_label": "기능 정의서",
+      "sheet_name": "기능정의서",
+      "row_index": 31,
+      "change_type": "기능 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "요구사항 ID": "REQ-015",
+        "기능ID": "MES 재고 REQ-015 재공 재고 조회 신규 2026-03-14 2026-03-17 재공 현황 파악 공정/라인/품목별 재공 재고를 조회 조건 선택 → 재공 집계 → 목록 표시 재공 재고 조회 화면 공장/라인 권한 적용 조회 3초 이내 재공 재고, 품목 마스터 요청자 누락",
+        "기능명": "재공 재고 조회",
+        "요청자": "",
+        "상태": "신규",
+        "설명": "MES 재고 REQ-015 재공 재고 조회 신규 2026-03-14 2026-03-17 재공 현황 파악 공정/라인/품목별 재공 재고를 조회 조건 선택 → 재공 집계 → 목록 표시 재공 재고 조회 화면 공장/라인 권한 적용 조회 3초 이내 재공 재고, 품목 마스터 요청자 누락",
+        "기능": "",
+        "입력": "자가점검 필요",
+        "출력": "자가점검 필요",
+        "예외처리": "",
+        "화면ID": "UI-015",
+        "우선순위": "3",
+        "기타": "traceability-agent 연결 보완 후보"
+      },
+      "reason": "append_feature_candidate"
+    },
+    {
+      "document_key": "feature_definition",
+      "document_label": "기능 정의서",
+      "sheet_name": "기능정의서",
+      "row_index": 32,
+      "change_type": "기능 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "요구사항 ID": "REQ-018",
+        "기능ID": "MES 감사 REQ-018 감사 로그 조회 김도현 신규 2026-03-17 2026-03-20 변경 이력 추적 사용자 주요 행위 로그를 조건별로 조회 조건 선택 → 로그 조회 감사 권한 사용자만 조회 조회 5초 이내 감사 로그 화면 요구사항 누락",
+        "기능명": "감사 로그 조회",
+        "요청자": "",
+        "상태": "신규",
+        "설명": "MES 감사 REQ-018 감사 로그 조회 김도현 신규 2026-03-17 2026-03-20 변경 이력 추적 사용자 주요 행위 로그를 조건별로 조회 조건 선택 → 로그 조회 감사 권한 사용자만 조회 조회 5초 이내 감사 로그 화면 요구사항 누락",
+        "기능": "",
+        "입력": "자가점검 필요",
+        "출력": "자가점검 필요",
+        "예외처리": "",
+        "화면ID": "UI-018",
+        "우선순위": "3",
+        "기타": "traceability-agent 연결 보완 후보"
+      },
+      "reason": "append_feature_candidate"
+    },
+    {
+      "document_key": "feature_definition",
+      "document_label": "기능 정의서",
+      "sheet_name": "기능정의서",
+      "row_index": 33,
+      "change_type": "기능 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "요구사항 ID": "REQ-022",
+        "기능ID": "MES 배치 REQ-022 배치 처리 결과 조회 유민석 신규 2026-03-21 야간 배치 결과 확인 배치 수행 결과, 성공/실패 건수, 실패 메시지를 조회 배치 종료 → 결과 저장 → 조회 배치 결과 조회 화면 운영자만 조회 조회 3초 이내 배치 결과, 실패 로그 최종수정일자 누락",
+        "기능명": "배치 처리 결과 조회",
+        "요청자": "",
+        "상태": "신규",
+        "설명": "MES 배치 REQ-022 배치 처리 결과 조회 유민석 신규 2026-03-21 야간 배치 결과 확인 배치 수행 결과, 성공/실패 건수, 실패 메시지를 조회 배치 종료 → 결과 저장 → 조회 배치 결과 조회 화면 운영자만 조회 조회 3초 이내 배치 결과, 실패 로그 최종수정일자 누락",
+        "기능": "",
+        "입력": "자가점검 필요",
+        "출력": "자가점검 필요",
+        "예외처리": "",
+        "화면ID": "UI-022",
+        "우선순위": "3",
+        "기타": "traceability-agent 연결 보완 후보"
+      },
+      "reason": "append_feature_candidate"
+    },
+    {
+      "document_key": "feature_definition",
+      "document_label": "기능 정의서",
+      "sheet_name": "기능정의서",
+      "row_index": 34,
+      "change_type": "기능 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "요구사항 ID": "REQ-023",
+        "기능ID": "MES 공지 REQ-023 긴급 공지 팝업 정하늘 추가 2026-03-22 2026-03-25 현장 공지 전파 긴급 공지를 등록하면 작업자 로그인 후 팝업으로 표시 공지 등록 → 대상자 식별 → 팝업 노출 공지 등록/팝업 화면 공지 관리자만 등록 로그인 후 1초 이내 표시 공지, 대상 사용자",
+        "기능명": "긴급 공지 팝업",
+        "요청자": "",
+        "상태": "신규",
+        "설명": "MES 공지 REQ-023 긴급 공지 팝업 정하늘 추가 2026-03-22 2026-03-25 현장 공지 전파 긴급 공지를 등록하면 작업자 로그인 후 팝업으로 표시 공지 등록 → 대상자 식별 → 팝업 노출 공지 등록/팝업 화면 공지 관리자만 등록 로그인 후 1초 이내 표시 공지, 대상 사용자",
+        "기능": "",
+        "입력": "자가점검 필요",
+        "출력": "자가점검 필요",
+        "예외처리": "",
+        "화면ID": "UI-023",
+        "우선순위": "3",
+        "기타": "traceability-agent 연결 보완 후보"
+      },
+      "reason": "append_feature_candidate"
+    },
+    {
+      "document_key": "feature_definition",
+      "document_label": "기능 정의서",
+      "sheet_name": "기능정의서",
+      "row_index": 35,
+      "change_type": "기능 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "요구사항 ID": "REQ_006",
+        "기능ID": "MES 설비 REQ_006 설비 상태 모니터링ㄱ 한지훈 신규 2026-03-06 2026-03-09 설비 이상 조기 인지 설비 가동/비가동/알람 상태를 실시간 조회 설비 상태 수집 → 상태 표시 설비 모니터링 화면 설비 권한별 조회 범위 제한 상태 갱신 주기 5초 이내 설비 상태, 알람 이력 의도적 ID 형식 및 오탈자 포함",
+        "기능명": "설비 상태 모니터링ㄱ",
+        "요청자": "",
+        "상태": "신규",
+        "설명": "MES 설비 REQ_006 설비 상태 모니터링ㄱ 한지훈 신규 2026-03-06 2026-03-09 설비 이상 조기 인지 설비 가동/비가동/알람 상태를 실시간 조회 설비 상태 수집 → 상태 표시 설비 모니터링 화면 설비 권한별 조회 범위 제한 상태 갱신 주기 5초 이내 설비 상태, 알람 이력 의도적 ID 형식 및 오탈자 포함",
+        "기능": "",
+        "입력": "자가점검 필요",
+        "출력": "자가점검 필요",
+        "예외처리": "",
+        "화면ID": "UI-006",
+        "우선순위": "3",
+        "기타": "traceability-agent 연결 보완 후보"
+      },
+      "reason": "append_feature_candidate"
+    },
+    {
+      "document_key": "feature_definition",
+      "document_label": "기능 정의서",
+      "sheet_name": "기능정의서",
+      "row_index": 36,
+      "change_type": "기능 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "요구사항 ID": "RQ-012",
+        "기능ID": "MES 승인 RQ-012 작업지시 취소 승인 문태호 신규 2026-03-12 2026-03-15 임의 취소 방지 작업자가 취소 요청한 작업지시를 리더가 승인/반려 취소 요청 → 승인자 확인 → 승인/반려 취소 승인 화면 승인자 권한 검증 승인 처리 2초 이내 취소 요청 이력 의도적 요구사항 ID 접두어 오류",
+        "기능명": "작업지시 취소 승인",
+        "요청자": "",
+        "상태": "신규",
+        "설명": "MES 승인 RQ-012 작업지시 취소 승인 문태호 신규 2026-03-12 2026-03-15 임의 취소 방지 작업자가 취소 요청한 작업지시를 리더가 승인/반려 취소 요청 → 승인자 확인 → 승인/반려 취소 승인 화면 승인자 권한 검증 승인 처리 2초 이내 취소 요청 이력 의도적 요구사항 ID 접두어 오류",
+        "기능": "",
+        "입력": "자가점검 필요",
+        "출력": "자가점검 필요",
+        "예외처리": "",
+        "화면ID": "UI-012",
+        "우선순위": "3",
+        "기타": "traceability-agent 연결 보완 후보"
+      },
+      "reason": "append_feature_candidate"
+    },
+    {
+      "document_key": "ui_design",
+      "document_label": "UI 설계서",
+      "sheet_name": "UI설계서",
+      "row_index": 28,
+      "change_type": "UI 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "업무그룹": "",
+        "요구사항 ID": "REQ-004",
+        "기능ID": "REQ-004-F02",
+        "화면ID": "UI-004-TEMP",
+        "화면명": "작업 실적 임시저장",
+        "화면유형": "화면",
+        "상태": "신규",
+        "사용자행위/버튼": "등록, 임시저장, 조회",
+        "주요 입력항목": "작업지시번호, 임시 입력값",
+        "주요 출력항목": "임시저장 결과",
+        "검증규칙": "",
+        "API/서비스": "",
+        "권한": "일반사용자",
+        "비고": "",
+        "기타": "traceability-agent 화면 연결 보완 후보"
+      },
+      "reason": "append_ui_candidate"
+    },
+    {
+      "document_key": "ui_design",
+      "document_label": "UI 설계서",
+      "sheet_name": "UI설계서",
+      "row_index": 29,
+      "change_type": "UI 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "업무그룹": "",
+        "요구사항 ID": "REQ-007",
+        "기능ID": "REQ-007-F01",
+        "화면ID": "UI-007-EX",
+        "화면명": "품질 검사 결과 예외등록",
+        "화면유형": "화면",
+        "상태": "신규",
+        "사용자행위/버튼": "등록",
+        "주요 입력항목": "LOT, 예외사유",
+        "주요 출력항목": "예외등록 결과",
+        "검증규칙": "",
+        "API/서비스": "",
+        "권한": "일반사용자",
+        "비고": "",
+        "기타": "traceability-agent 화면 연결 보완 후보"
+      },
+      "reason": "append_ui_candidate"
+    },
+    {
+      "document_key": "ui_design",
+      "document_label": "UI 설계서",
+      "sheet_name": "UI설계서",
+      "row_index": 30,
+      "change_type": "UI 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "업무그룹": "",
+        "요구사항 ID": "REQ-014",
+        "기능ID": "REQ-014-F01",
+        "화면ID": "UI-014",
+        "화면명": "LOT 추적 조회",
+        "화면유형": "화면",
+        "상태": "신규",
+        "사용자행위/버튼": "조회",
+        "주요 입력항목": "LOT 번호",
+        "주요 출력항목": "LOT 이력 트리",
+        "검증규칙": "",
+        "API/서비스": "",
+        "권한": "일반사용자",
+        "비고": "",
+        "기타": "traceability-agent 화면 연결 보완 후보"
+      },
+      "reason": "append_ui_candidate"
+    },
+    {
+      "document_key": "ui_design",
+      "document_label": "UI 설계서",
+      "sheet_name": "UI설계서",
+      "row_index": 31,
+      "change_type": "UI 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "업무그룹": "",
+        "요구사항 ID": "REQ-017",
+        "기능ID": "REQ-017-F02",
+        "화면ID": "UI-017-DEL",
+        "화면명": "사용자 계정 삭제",
+        "화면유형": "화면",
+        "상태": "신규",
+        "사용자행위/버튼": "삭제",
+        "주요 입력항목": "사용자ID",
+        "주요 출력항목": "삭제 결과",
+        "검증규칙": "",
+        "API/서비스": "",
+        "권한": "일반사용자",
+        "비고": "",
+        "기타": "traceability-agent 화면 연결 보완 후보"
+      },
+      "reason": "append_ui_candidate"
+    },
+    {
+      "document_key": "ui_design",
+      "document_label": "UI 설계서",
+      "sheet_name": "UI설계서",
+      "row_index": 32,
+      "change_type": "UI 후보 추가",
+      "after": {
+        "시스템": "MES",
+        "업무그룹": "",
+        "요구사항 ID": "REQ-025",
+        "기능ID": "F-025",
+        "화면ID": "UI-025",
+        "화면명": "구버전 작업지시 삭제",
+        "화면유형": "화면",
+        "상태": "신규",
+        "사용자행위/버튼": "삭제, 완료",
+        "주요 입력항목": "작업지시번호",
+        "주요 출력항목": "삭제 결과",
+        "검증규칙": "",
+        "API/서비스": "",
+        "권한": "일반사용자",
+        "비고": "",
+        "기타": "traceability-agent 화면 연결 보완 후보"
+      },
+      "reason": "append_ui_candidate"
+    }
+  ],
+  "remaining_warnings": {
+    "requirement_definition": [],
+    "feature_definition": [],
+    "ui_design": []
+  }
+}

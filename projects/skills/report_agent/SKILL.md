@@ -5,6 +5,7 @@ allowed-tools:
   - get_document_catalog
   - get_scenario_definition
   - get_subagent_outputs
+  - build_final_review_report
 metadata:
   author: skax-master-project
   version: "0.2"
@@ -35,14 +36,11 @@ metadata:
 ## 3. Mandatory Workflow
 
 1. `get_subagent_outputs`를 먼저 호출한다.
-2. 저장된 결과에 포함된 `scenario_key`, `summary`, `score`, `findings`, `warnings`, `recommendations`를 확인한다.
-3. 각 시나리오 결과를 `FinalReviewReport.scenario_results`에 반영한다.
-4. `score`, `findings`, `warnings`, `recommendations`는 원본을 임의 변경하지 않는다.
-5. 최종 `overall_score`는 저장된 시나리오 점수의 산술 평균으로 계산한다.
-6. `blocked_scenarios`는 보완이 필요한 시나리오를 저장된 점수와 이슈 기준으로 선정한다.
-7. `priority_actions`는 저장된 recommendations와 주요 findings에서 중복 없이 추출한다.
-8. 최종 응답은 반드시 구조화된 `FinalReviewReport` 형식으로 반환한다.
-9. `persist_subagent_output`을 호출하지 않는다. Report Agent는 시나리오별 결과를 새 파일로 다시 저장하지 않는다.
+2. 저장된 결과가 있는지 확인한다.
+3. 반드시 `build_final_review_report`를 호출해 최종 `FinalReviewReport` JSON을 파일로 저장한다.
+4. 최종 응답에는 `build_final_review_report` 도구 결과의 `artifact_path`, `overall_score`, `blocked_scenarios`만 짧게 요약한다.
+5. 최종 응답에 `findings`, `warnings`, `recommendations`, 문서별 보완본 JSON, 최종 보고서 전체 JSON을 복사하지 않는다.
+6. `persist_subagent_output`을 호출하지 않는다. Report Agent는 시나리오별 결과를 새 파일로 다시 저장하지 않는다.
 
 ## 4. Scenario Mapping
 
@@ -144,7 +142,7 @@ overall_score = round(sum(scenario.score) / len(scenarios))
 
 ## 10. Output Format
 
-반드시 다음 구조를 반환한다.
+최종 보고서 파일은 `build_final_review_report` 도구가 다음 구조로 저장한다.
 
 ```json
 {
@@ -169,13 +167,18 @@ overall_score = round(sum(scenario.score) / len(scenarios))
 }
 ```
 
+Report Agent의 채팅 응답은 다음처럼 짧게 작성한다.
+
+```text
+최종 보고서 생성 완료: {artifact_path}
+overall_score={overall_score}, blocked_scenarios={blocked_scenarios}
+```
+
 ## 11. Final Checklist
 
 최종 응답 전에 다음을 확인한다.
 
 1. `get_subagent_outputs`를 호출했는가?
-2. 저장된 시나리오별 score가 최종 보고서에 그대로 들어갔는가?
-3. 저장된 findings/warnings/recommendations를 누락하지 않았는가?
-4. `overall_score`가 시나리오 점수 평균과 일치하는가?
-5. findings가 있는 시나리오를 “통과”로 표시하지 않았는가?
-6. priority_actions가 실제 recommendations 기반인가?
+2. `build_final_review_report`를 호출했는가?
+3. 최종 보고서 전체 JSON을 응답에 복사하지 않았는가?
+4. 응답이 저장 경로와 짧은 요약만 포함하는가?

@@ -1,0 +1,32 @@
+{
+  "scenario_key": "20260510_170831.ui_match_agent.feature_definition",
+  "target_agent_name": "20260510_170831.ui_match_agent.feature_definition-agent",
+  "summary": "기능 정의서 보완본의 교정 품질 점검 결과, 모든 보완본 JSON이 생성되지 않아 품질 점수가 0점으로 평가되었습니다. 기준점수(85점) 미달로 보완 권고가 필요합니다.",
+  "score": 0,
+  "threshold": 85,
+  "rerun_required": true,
+  "findings": [
+    "요구사항 정의서 보완본 JSON이 생성되지 않았습니다.",
+    "기능 정의서 보완본 JSON이 생성되지 않았습니다.",
+    "UI 설계서 보완본 JSON이 생성되지 않았습니다.",
+    "보완본 재점검 전용 오류: 지원하지 않는 시나리오: 20260510_170831.ui_match_agent.feature_definition"
+  ],
+  "warnings": [],
+  "correction_guidance": [
+    "요구사항 정의서 보완본을 20260510_170831_ui_match_agent_feature_definition_output_requirement_definition.json 형식으로 생성하세요.",
+    "기능 정의서 보완본을 20260510_170831_ui_match_agent_feature_definition_output_feature_definition.json 형식으로 생성하세요.",
+    "UI 설계서 보완본을 20260510_170831_ui_match_agent_feature_definition_output_ui_design.json 형식으로 생성하세요.",
+    "20260510_170831.ui_match_agent.feature_definition-agent 보완 지침: 지원하지 않는 시나리오: 20260510_170831.ui_match_agent.feature_definition 이 항목이 보완본에 남지 않도록 관련 문서/행/컬럼을 수정하세요."
+  ],
+  "checked_document_paths": [
+    "C:\\Users\\DJ\\Documents\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260510_170831\\20260510_170831.ui_match_agent.feature_definition\\20260510_170831_ui_match_agent_feature_definition_agent_output_requirement_definition.json",
+    "C:\\Users\\DJ\\Documents\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260510_170831\\20260510_170831.ui_match_agent.feature_definition\\20260510_170831_ui_match_agent_feature_definition_agent_output_feature_definition.json",
+    "C:\\Users\\DJ\\Documents\\GitHub\\SKAX-MasterProject\\projects\\data\\subagents\\20260510_170831\\20260510_170831.ui_match_agent.feature_definition\\20260510_170831_ui_match_agent_feature_definition_agent_output_ui_design.json"
+  ],
+  "document_scores": {
+    "requirement_definition": 0,
+    "feature_definition": 0,
+    "ui_design": 0
+  },
+  "agent_name": "self_quality_agent"
+}

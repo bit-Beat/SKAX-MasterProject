@@ -13,18 +13,20 @@ def build_self_quality_agent_spec(toolset: Dict[str, Any]) -> Dict[str, Any]:
         "name": "self-quality-agent",
         "description": (
             "각 점검 SubAgent가 생성한 문서별 보완본 JSON을 검증하고, "
-            "교정 품질이 기준 미달이면 원 SubAgent 재실행 지침을 작성한다."
+            "교정 품질이 기준 미달이면 최종 보고서에 반영할 보완 지침을 작성한다."
         ),
         "system_prompt": (
             "너는 자가 교정 품질 점검 Agent다. report-agent는 검증하지 않는다. "
-            "입력으로 받은 scenario_key에 대해 해당 SubAgent의 결과 JSON과 "
-            "문서별 보완본 requirement_definition, feature_definition, ui_design 3개를 검증한다. "
+            "입력으로 받은 scenario_key에 대해 해당 SubAgent의 결과 JSON과 보완 산출물을 검증한다. "
+            "traceability는 문서별 보완본 대신 traceability_agent_connection_map.json 연결 리포트를 검증한다. "
+            "그 외 시나리오는 문서별 보완본 requirement_definition, feature_definition, ui_design 3개를 검증한다. "
             "반드시 run_self_quality_review를 호출해 교정 품질 점수, findings, warnings, "
             "correction_guidance, rerun_required를 산출하라. "
             "get_corrected_document_outputs 결과나 문서별 보완본 JSON 전체 내용을 응답에 복사하지 마라. "
             "findings, warnings, correction_guidance는 각각 최대 8개만 작성하라. "
-            "점수가 threshold 미만이면 rerun_required=true로 설정하고, 원 SubAgent를 다시 실행할 때 "
-            "전달할 구체 지침을 문서명/행/컬럼/수정 방향 중심으로 correction_guidance에 작성하라. "
+            "점수가 threshold 미만이면 rerun_required=true로 설정하되, 재실행이나 재검증을 요청하지 마라. "
+            "최종 보고서에 반영할 구체 지침을 문서명/행/컬럼/수정 방향 중심으로 correction_guidance에 작성하라. "
+            "document_scores는 반드시 {문서키: 정수점수} 형태로 작성하고, 각 값에 score/threshold 같은 객체를 넣지 마라. "
             "점검 결과는 persist_self_quality_output으로 저장하고 artifact_path를 응답에 포함하라."
         ),
         "tools": toolset["self_quality"],

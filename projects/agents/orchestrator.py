@@ -120,7 +120,7 @@ def create_orchestrator_agent(agent_request: Dict[str, Any]):
         system_prompt=build_system_prompt(agent_request),
         subagents=subagents,
         skills=toolset["skills"]["orchestrator_agent"],
-        response_format=None,  # 메인 에이전트는 report-agent를 호출해 결과를 얻음
+        response_format=None,  # 최종 보고서는 report-agent 도구가 저장한 JSON을 사용함
         name="orchestrator",
     )
 
@@ -141,7 +141,7 @@ def run_orchestrator(
         on_stream_event=on_stream_event,
     )
 
-    final_report = normalize_report(
+    final_report = load_saved_final_report(run_id) or normalize_report(
         run_id=run_id,
         scenario_order=agent_request.get("scenario_order", []),
         structured_response=raw_result.get("structured_response"),
@@ -158,6 +158,7 @@ def run_orchestrator(
         "document_catalog": get_document_catalog_data(agent_request.get("documents", [])),
         "final_report": final_report,
         "raw_last_message": extract_last_message(raw_result),
+        "stream_error": raw_result.get("stream_error"),
     }
     emit_stream_event(
         {
@@ -204,15 +205,15 @@ def build_system_prompt(agent_request: Dict[str, Any]) -> str:
 6. SC-002/traceability는 traceability-agent에 위임한다.
 7. SC-003/ui_match는 ui-match-agent에 위임한다.
 8. SC-004/coverage는 coverage-agent에 위임한다.
-9. basic_quality, traceability, ui_match SubAgent 실행 직후에는 반드시 self-quality-agent를 호출해 해당 SubAgent가 생성한 문서별 보완본 3개를 검증한다.
+9. basic_quality, traceability, ui_match SubAgent 실행 직후에는 반드시 self-quality-agent를 정확히 1회만 호출해 해당 SubAgent가 생성한 문서별 보완본 3개를 검증한다.
 10. coverage-agent는 현재 산출물 기준 누락/추가/분해 권고만 생성하므로 문서별 교정 output을 만들지 않고 self-quality-agent도 호출하지 않는다.
-11. self-quality-agent의 score가 threshold 미만이거나 rerun_required=true이면, self-quality-agent의 correction_guidance를 원 SubAgent 입력에 포함해 해당 시나리오 SubAgent를 1회 재실행한다. 단, coverage는 재실행/교정 검증 대상에서 제외한다.
-12. 원 SubAgent를 재실행한 경우 다시 self-quality-agent를 호출해 재검증한다. 동일 시나리오의 재실행은 최대 1회로 제한한다.
-13. 모든 교정 대상 SubAgent와 self-quality-agent 검증이 끝난 뒤에만 report-agent로 최종 보고서를 통합한다.
+11. self-quality-agent의 score가 threshold 미만이거나 rerun_required=true여도 원 SubAgent를 재실행하지 않는다. correction_guidance는 최종 보고서의 보완 권고 근거로만 사용한다.
+12. 동일 scenario_key에 대해 self-quality-agent를 두 번 이상 호출하지 않는다. 재검증, 반복 자가교정, 사후 자가교정은 금지한다.
+13. 모든 교정 대상 SubAgent와 1회 self-quality-agent 검증이 끝난 뒤 report-agent를 반드시 호출해 최종 보고서를 작성한다.
 14. 문서가 애매하거나 판단 근거가 부족하면 qa-agent로 확인 질문을 생성한다.
 15. 동일 Tool 반복 호출은 피하고, 불확실한 내용은 확정 판단으로 공유하지 않는다.
-16. report-agent는 반드시 get_subagent_outputs로 저장된 서브에이전트 결과를 읽고, score와 주요 findings/warnings/recommendations를 사용해야 한다. 단, 각 목록은 최대 8개만 최종 응답에 포함한다.
-17. 최종 응답은 반드시 구조화된 보고서로 반환한다.
+16. report-agent는 반드시 build_final_review_report 도구를 호출해 최종 보고서 JSON을 저장한다.
+17. report-agent 호출 뒤에는 최종 JSON 전체를 답변에 복사하지 말고 저장 경로와 짧은 완료 메시지만 반환한다.
 """
 
 
@@ -233,12 +234,11 @@ def build_task_prompt(agent_request: Dict[str, Any]) -> str:
 
 반드시 시나리오를 이 순서대로 하나씩 실행하라. 
 먼저 basic_quality를 실행하라. basic_quality가 완료되면 traceability를 실행하라. traceability가 완료되면 ui_match를 실행하라. ui_match가 완료되면 coverage를 실행하라. 
-모든 시나리오가 완료된 후 report-agent로 최종 보고서를 생성하라.
-basic_quality, traceability, ui_match 실행 후에는 self-quality-agent로 문서별 보완본을 검증하라.
+모든 시나리오가 완료된 후 report-agent를 반드시 호출해 최종 보고서를 생성하라.
+basic_quality, traceability, ui_match 실행 후에는 self-quality-agent로 문서별 보완본을 검증하되, 각 시나리오별로 정확히 1회만 호출하라.
 coverage는 현재 산출물 기준 누락/추가/분해 권고만 생성하므로 문서별 교정 output과 self-quality-agent 검증을 수행하지 마라.
-self-quality-agent가 rerun_required=true를 반환하면 correction_guidance를 포함해 원 SubAgent를 최대 1회 재실행한 뒤 다시 검증하라. 단, coverage는 재실행/교정 검증 대상에서 제외한다.
-반드시 저장된 서브에이전트 결과의 시나리오별 요약, 점수, 주요 findings, 주요 warnings, 주요 recommendations 를 반영하고,
-각 findings/warnings/recommendations 목록은 최대 8개로 제한하라.
+self-quality-agent가 rerun_required=true를 반환해도 원 SubAgent를 재실행하지 말고, self-quality-agent도 다시 호출하지 마라. correction_guidance는 최종 보고서 권고에만 반영하라.
+report-agent는 build_final_review_report 도구로 최종 보고서 JSON을 저장하고, 최종 응답에는 저장된 서브에이전트 결과, findings, warnings, recommendations, 문서별 보완본 JSON을 복사하지 마라.
 """
 
 
@@ -276,6 +276,18 @@ def normalize_report(
     report.setdefault("scenario_results", [])
     report.setdefault("priority_actions", [])
     return merge_saved_subagent_reports(report, run_id, scenario_order)
+
+
+def load_saved_final_report(run_id: str) -> Dict[str, Any] | None:
+    """report-agent가 도구로 저장한 최종 보고서를 우선 사용합니다."""
+    file_path = DATA_ROOT / run_id / "final_report.json"
+    if not file_path.exists():
+        return None
+    try:
+        payload = json.loads(file_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
 def merge_saved_subagent_reports(
@@ -580,7 +592,71 @@ def stream_agent_and_build_result(
                 total_units=total_units,
                 on_stream_event=on_stream_event,
             )
+    except json.JSONDecodeError as error:
+        if latest_state:
+            merge_state_into_raw_result(raw_result, latest_state, seen_messages)
+        fallback_message = (
+            "모델 도구 호출 JSON 파싱 오류가 발생해 스트리밍을 조기 종료했습니다. "
+            "이미 저장된 서브에이전트 결과를 기준으로 최종 보고서를 생성합니다."
+        )
+        append_messages(
+            raw_result["messages"],
+            [{"type": "ai", "content": fallback_message}],
+            seen_messages,
+        )
+        raw_result["stream_error"] = {
+            "error_type": error.__class__.__name__,
+            "error": str(error),
+            "active_subagents": active_subagents,
+            "completed_units": sorted(completed_units),
+        }
+        print(
+            "[STREAM_ERROR] "
+            + json.dumps(raw_result["stream_error"], ensure_ascii=False, default=str),
+            flush=True,
+        )
+        emit_stream_event(
+            {
+                "kind": "status",
+                "message": fallback_message,
+                "progress": build_progress_value(total_units, completed_units, phase="running"),
+            },
+            on_stream_event,
+        )
     except Exception as error:
+        if error.__class__.__name__ == "LengthFinishReasonError":
+            if latest_state:
+                merge_state_into_raw_result(raw_result, latest_state, seen_messages)
+            fallback_message = (
+                "모델 응답이 길이 제한에 도달해 스트리밍을 조기 종료했습니다. "
+                "이미 저장된 서브에이전트 결과를 기준으로 최종 보고서를 생성합니다."
+            )
+            append_messages(
+                raw_result["messages"],
+                [{"type": "ai", "content": fallback_message}],
+                seen_messages,
+            )
+            raw_result["stream_error"] = {
+                "error_type": error.__class__.__name__,
+                "error": str(error),
+                "active_subagents": active_subagents,
+                "completed_units": sorted(completed_units),
+            }
+            print(
+                "[STREAM_ERROR] "
+                + json.dumps(raw_result["stream_error"], ensure_ascii=False, default=str),
+                flush=True,
+            )
+            emit_stream_event(
+                {
+                    "kind": "status",
+                    "message": fallback_message,
+                    "progress": build_progress_value(total_units, completed_units, phase="running"),
+                },
+                on_stream_event,
+            )
+            return raw_result
+
         print(
             "[STREAM_ERROR] "
             + json.dumps(

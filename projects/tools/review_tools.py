@@ -225,6 +225,23 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
 
         return {"run_id": run_id, "outputs": outputs}
 
+    @tool("build_final_review_report")
+    def build_final_review_report_tool() -> Dict[str, Any]:
+        """저장된 서브에이전트 결과로 최종 보고서 JSON을 생성하고 저장합니다."""
+        final_report = build_final_review_report_payload(
+            run_id=run_id,
+            scenario_order=agent_request.get("scenario_order", []),
+        )
+        file_path = DATA_ROOT / run_id / "final_report.json"
+        save_json(file_path, final_report)
+        return {
+            "run_id": run_id,
+            "artifact_path": str(file_path),
+            "overall_score": final_report.get("overall_score", 0),
+            "blocked_scenarios": final_report.get("blocked_scenarios", []),
+            "scenario_count": len(final_report.get("scenario_results") or []),
+        }
+
     @tool("get_corrected_document_outputs")
     def get_corrected_document_outputs_tool(scenario_key: str) -> Dict[str, Any]:
         """시나리오 SubAgent가 생성한 문서별 보완본 JSON과 원 점검 결과를 반환합니다."""
@@ -258,6 +275,7 @@ def build_toolset(agent_request: Dict[str, Any]) -> Dict[str, Any]:
         get_document_catalog_tool,
         get_scenario_definition_tool,
         get_subagent_outputs_tool,
+        build_final_review_report_tool,
     ]
     self_quality_tools = [
         get_corrected_document_outputs_tool,
@@ -1134,13 +1152,14 @@ def persist_corrected_documents(
             agent_name=agent_name,
             review_payload=review_payload,
         )
-        apply_common_document_corrections(
-            document_key,
-            outputs[document_key],
-            scenario,
-            changes_by_document[document_key],
-            warnings_by_document[document_key],
-        )
+        if scenario != "traceability":
+            apply_common_document_corrections(
+                document_key,
+                outputs[document_key],
+                scenario,
+                changes_by_document[document_key],
+                warnings_by_document[document_key],
+            )
 
     if scenario == "traceability":
         apply_traceability_document_corrections(outputs, changes_by_document, warnings_by_document)
@@ -1148,6 +1167,17 @@ def persist_corrected_documents(
         apply_ui_match_document_corrections(outputs, changes_by_document, warnings_by_document)
     elif scenario == "coverage":
         apply_coverage_document_corrections(outputs, changes_by_document, warnings_by_document)
+
+    if scenario == "traceability":
+        connection_report = build_traceability_connection_report(
+            run_id=run_id,
+            outputs=outputs,
+            changes_by_document=changes_by_document,
+            warnings_by_document=warnings_by_document,
+        )
+        file_path = traceability_connection_report_path(run_id)
+        save_json(file_path, connection_report)
+        return [str(file_path)]
 
     saved_paths: List[str] = []
     for document_key, payload in outputs.items():
@@ -1374,6 +1404,212 @@ def apply_traceability_document_corrections(
                 changes_by_document["ui_design"].append(added)
     else:
         warnings_by_document["ui_design"].append("화면ID 컬럼을 찾지 못해 traceability 보완 행 자동 생성이 제한되었습니다.")
+
+
+def build_traceability_connection_report(
+    run_id: str,
+    outputs: Dict[str, Dict[str, Any]],
+    changes_by_document: Dict[str, List[Dict[str, Any]]],
+    warnings_by_document: Dict[str, List[str]],
+) -> Dict[str, Any]:
+    """Build a traceability-specific report focused on requirement-feature-UI links."""
+    requirement_rows = output_rows(outputs["requirement_definition"])
+    feature_rows = output_rows(outputs["feature_definition"])
+    ui_rows = output_rows(outputs["ui_design"])
+
+    req_id_col = find_column(requirement_rows, ["요구사항 id", "요구사항id", "requirement id"])
+    req_name_col = find_column(requirement_rows, ["요구사항명", "requirement name"])
+    feat_req_col = find_column(feature_rows, ["요구사항 id", "요구사항id", "requirement id"])
+    feature_id_col = find_column(feature_rows, ["기능id", "기능 id", "function id", "feature id"])
+    feature_name_col = find_column(feature_rows, ["기능명", "function name", "feature name"])
+    feature_screen_col = find_column(feature_rows, ["화면id", "화면 id", "screen id", "ui id"])
+    ui_req_col = find_column(ui_rows, ["요구사항 id", "요구사항id", "requirement id"])
+    ui_feature_id_col = find_column(ui_rows, ["기능id", "기능 id", "function id", "feature id"])
+    ui_screen_col = find_column(ui_rows, ["화면id", "화면 id", "screen id", "ui id"])
+    ui_name_col = find_column(ui_rows, ["화면명", "screen name", "ui name"])
+
+    feature_by_req = group_rows_by_value(feature_rows, feat_req_col)
+    ui_by_feature = group_rows_by_value(ui_rows, ui_feature_id_col)
+    ui_by_screen = group_rows_by_value(ui_rows, ui_screen_col)
+    traceability_changes = collect_traceability_changes(changes_by_document)
+    added_feature_req_ids = {
+        change_after_value(change, ["요구사항 id", "요구사항id", "requirement id"])
+        for change in traceability_changes
+        if change.get("reason") == "append_feature_candidate"
+    }
+    added_ui_feature_ids = {
+        change_after_value(change, ["기능id", "기능 id", "function id", "feature id"])
+        for change in traceability_changes
+        if change.get("reason") == "append_ui_candidate"
+    }
+    added_ui_screen_ids = {
+        change_after_value(change, ["화면id", "화면 id", "screen id", "ui id"])
+        for change in traceability_changes
+        if change.get("reason") == "append_ui_candidate"
+    }
+    added_feature_req_ids.discard("")
+    added_ui_feature_ids.discard("")
+    added_ui_screen_ids.discard("")
+
+    requirement_links: List[Dict[str, Any]] = []
+    for requirement_row in requirement_rows:
+        req_id = cell_value(requirement_row, req_id_col)
+        if not req_id:
+            continue
+
+        linked_features = feature_by_req.get(req_id, [])
+        feature_ids = compact_unique(cell_value(row, feature_id_col) for row in linked_features)
+        feature_names = compact_unique(cell_value(row, feature_name_col) for row in linked_features)
+        screen_ids = compact_unique(cell_value(row, feature_screen_col) for row in linked_features)
+        correction_applied = req_id in added_feature_req_ids
+        status = "corrected" if correction_applied else ("linked" if linked_features else "missing_feature")
+        requirement_links.append({
+            "requirement_id": req_id,
+            "requirement_name": cell_value(requirement_row, req_name_col),
+            "status": status,
+            "status_label": "보완됨" if status == "corrected" else ("연결됨" if status == "linked" else "기능 누락"),
+            "correction_applied": correction_applied,
+            "feature_count": len(linked_features),
+            "feature_ids": feature_ids,
+            "feature_names": feature_names,
+            "screen_ids": screen_ids,
+            "action": "기능 후보 추가됨, 담당자 검토 필요" if correction_applied else ("기능 정의 연결 확인" if status == "linked" else "기능 정의서에 요구사항 기반 기능 후보를 추가/검토"),
+        })
+
+    feature_links: List[Dict[str, Any]] = []
+    for feature_row in feature_rows:
+        feature_id = cell_value(feature_row, feature_id_col)
+        req_id = cell_value(feature_row, feat_req_col)
+        screen_id = cell_value(feature_row, feature_screen_col)
+        if not any([feature_id, req_id, screen_id]):
+            continue
+
+        matched_ui_rows = ui_by_feature.get(feature_id, []) if feature_id else []
+        if not matched_ui_rows and screen_id:
+            matched_ui_rows = ui_by_screen.get(screen_id, [])
+
+        ui_ids = compact_unique(cell_value(row, ui_screen_col) for row in matched_ui_rows)
+        ui_names = compact_unique(cell_value(row, ui_name_col) for row in matched_ui_rows)
+        correction_applied = bool(
+            (feature_id and feature_id in added_ui_feature_ids)
+            or (screen_id and screen_id in added_ui_screen_ids)
+        )
+        status = "corrected" if correction_applied else ("linked" if matched_ui_rows else "missing_ui")
+        feature_links.append({
+            "requirement_id": req_id,
+            "feature_id": feature_id,
+            "feature_name": cell_value(feature_row, feature_name_col),
+            "screen_id": screen_id,
+            "status": status,
+            "status_label": "보완됨" if status == "corrected" else ("연결됨" if status == "linked" else "UI 누락"),
+            "correction_applied": correction_applied,
+            "ui_match_count": len(matched_ui_rows),
+            "ui_screen_ids": ui_ids,
+            "ui_names": ui_names,
+            "action": "UI 후보 추가됨, 담당자 검토 필요" if correction_applied else ("UI 설계 연결 확인" if status == "linked" else "UI 설계서에 화면/기능 매핑 후보를 추가/검토"),
+        })
+
+    req_ids = set(non_empty_values(requirement_rows, req_id_col))
+    feature_req_ids = set(non_empty_values(feature_rows, feat_req_col))
+    feature_ids = set(non_empty_values(feature_rows, feature_id_col))
+    feature_screen_ids = set(non_empty_values(feature_rows, feature_screen_col))
+    ui_req_ids = set(non_empty_values(ui_rows, ui_req_col))
+    ui_feature_ids = set(non_empty_values(ui_rows, ui_feature_id_col))
+    ui_screen_ids = set(non_empty_values(ui_rows, ui_screen_col))
+
+    return {
+        "run_id": run_id,
+        "scenario_key": "traceability",
+        "artifact_type": "traceability_connection_map",
+        "summary": build_traceability_summary(requirement_links, feature_links, requirement_rows, feature_rows, ui_rows),
+        "requirement_to_feature": requirement_links,
+        "feature_to_ui": feature_links,
+        "orphan_references": {
+            "feature_requirement_ids_not_in_requirements": missing_values(feature_req_ids, req_ids),
+            "ui_requirement_ids_not_in_requirements": missing_values(ui_req_ids, req_ids),
+            "ui_feature_ids_not_in_features": missing_values(ui_feature_ids, feature_ids),
+            "ui_screen_ids_not_in_features": missing_values(ui_screen_ids, feature_screen_ids),
+        },
+        "traceability_changes": traceability_changes,
+        "remaining_warnings": warnings_by_document,
+    }
+
+
+def build_traceability_summary(
+    requirement_links: List[Dict[str, Any]],
+    feature_links: List[Dict[str, Any]],
+    requirement_rows: List[Dict[str, Any]],
+    feature_rows: List[Dict[str, Any]],
+    ui_rows: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Summarize link coverage rates for the traceability UI."""
+    requirement_total = len(requirement_links)
+    feature_total = len(feature_links)
+    linked_requirements = sum(1 for item in requirement_links if item.get("status") in {"linked", "corrected"})
+    linked_features = sum(1 for item in feature_links if item.get("status") in {"linked", "corrected"})
+
+    return {
+        "requirement_row_count": len(requirement_rows),
+        "feature_row_count": len(feature_rows),
+        "ui_row_count": len(ui_rows),
+        "requirement_count": requirement_total,
+        "feature_count": feature_total,
+        "linked_requirement_count": linked_requirements,
+        "missing_requirement_to_feature_count": max(requirement_total - linked_requirements, 0),
+        "requirement_to_feature_coverage_rate": percent_rate(linked_requirements, requirement_total),
+        "linked_feature_count": linked_features,
+        "missing_feature_to_ui_count": max(feature_total - linked_features, 0),
+        "feature_to_ui_coverage_rate": percent_rate(linked_features, feature_total),
+    }
+
+
+def collect_traceability_changes(changes_by_document: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    """Keep only traceability-created link candidate rows from correction metadata."""
+    traceability_reasons = {"append_feature_candidate", "append_ui_candidate"}
+    changes: List[Dict[str, Any]] = []
+    for document_key, document_changes in changes_by_document.items():
+        for change in document_changes:
+            if not isinstance(change, dict) or change.get("reason") not in traceability_reasons:
+                continue
+            changes.append({
+                "document_key": document_key,
+                "document_label": change.get("document_label") or DOCUMENT_LABELS.get(document_key, document_key),
+                "sheet_name": change.get("sheet_name", ""),
+                "row_index": change.get("row_index"),
+                "change_type": "기능 후보 추가" if change.get("reason") == "append_feature_candidate" else "UI 후보 추가",
+                "after": change.get("after"),
+                "reason": change.get("reason"),
+            })
+    return changes
+
+
+def change_after_value(change: Dict[str, Any], keywords: List[str]) -> str:
+    """Find a value in a traceability change's inserted row."""
+    after = change.get("after", {})
+    if not isinstance(after, dict):
+        return ""
+    column = find_column([after], keywords)
+    return cell_value(after, column)
+
+
+def compact_unique(values: Any) -> List[str]:
+    """Return distinct non-empty string values in input order."""
+    seen: set[str] = set()
+    compacted: List[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        compacted.append(text)
+    return compacted
+
+
+def percent_rate(numerator: int, denominator: int) -> float:
+    """Return a one-decimal percentage rate without raising on zero."""
+    if denominator <= 0:
+        return 0.0
+    return round((numerator / denominator) * 100, 1)
 
 
 def apply_ui_match_document_corrections(
@@ -1769,11 +2005,31 @@ def corrected_document_output_path(
     return DATA_ROOT / run_id / scenario / f"{output_prefix}_output_{document_key}.json"
 
 
+def traceability_connection_report_path(run_id: str) -> Path:
+    """Return the saved traceability connection map artifact path."""
+    return DATA_ROOT / run_id / "traceability" / "traceability_agent_connection_map.json"
+
+
 def get_corrected_document_outputs(run_id: str, scenario_key: str) -> Dict[str, Any]:
     """저장된 원 SubAgent 결과와 문서별 보완본 요약을 읽습니다."""
     scenario = canonical_scenario_key(scenario_key)
     prefix = corrected_output_prefix(scenario, f"{scenario}-agent")
     subagent_result = load_subagent_result(run_id, scenario)
+
+    if scenario == "traceability":
+        file_path = traceability_connection_report_path(run_id)
+        connection_report = load_json_dict(file_path) if file_path.exists() else {}
+        return {
+            "run_id": run_id,
+            "scenario_key": scenario,
+            "target_agent_name": prefix,
+            "subagent_result": summarize_subagent_result(subagent_result),
+            "connection_report_path": str(file_path),
+            "connection_report": connection_report,
+            "documents": {},
+            "missing_documents": [],
+        }
+
     documents: Dict[str, Dict[str, Any]] = {}
     missing_documents: List[str] = []
 
@@ -1910,8 +2166,397 @@ def compact_subagent_output_for_report(payload: Dict[str, Any]) -> Dict[str, Any
     }
 
 
+def build_final_review_report_payload(run_id: str, scenario_order: List[str]) -> Dict[str, Any]:
+    """저장된 서브에이전트 결과를 최종 보고서 JSON 형태로 조립합니다."""
+    normalized_order = [canonical_scenario_key(key) for key in scenario_order] or [
+        "basic_quality",
+        "traceability",
+        "ui_match",
+        "coverage",
+    ]
+    scenario_results: List[Dict[str, Any]] = []
+
+    for scenario_key in normalized_order:
+        payload = load_subagent_result(run_id, scenario_key)
+        if payload:
+            scenario_results.append(build_final_scenario_result(scenario_key, payload))
+        else:
+            scenario_results.append(build_missing_scenario_result(scenario_key))
+
+    scores = [
+        result["score"]
+        for result in scenario_results
+        if isinstance(result.get("score"), int)
+    ]
+    overall_score = round(sum(scores) / len(scores)) if scores else 0
+    blocked_scenarios = [
+        result["scenario_key"]
+        for result in scenario_results
+        if result.get("status") == "보완 필요"
+    ]
+
+    return {
+        "run_id": run_id,
+        "summary": build_final_report_summary(scenario_results, overall_score),
+        "overall_score": overall_score,
+        "blocked_scenarios": blocked_scenarios,
+        "scenario_order": normalized_order,
+        "scenario_results": scenario_results,
+        "verdict_cards": build_final_verdict_cards(scenario_results, overall_score, blocked_scenarios),
+        "top_risks": build_final_top_risks(scenario_results),
+        "traceability_overview": build_final_traceability_overview(run_id),
+        "document_fix_points": build_final_document_fix_points(scenario_results),
+        "business_impact_features": build_final_business_impact_features(scenario_results),
+        "priority_actions": build_final_priority_actions(scenario_results),
+    }
+
+
+def build_final_scenario_result(scenario_key: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+    """서브에이전트 저장 결과를 최종 보고서의 시나리오 항목으로 변환합니다."""
+    score = payload.get("score")
+    score = score if isinstance(score, int) else 0
+    findings = limit_items(payload.get("findings") or [], 9)
+    warnings = limit_items(payload.get("warnings") or [], 9)
+    recommendations = limit_items(payload.get("recommendations") or [], 9)
+    status = payload.get("status") or infer_final_status(score, findings)
+    return {
+        "scenario_key": canonical_scenario_key(scenario_key),
+        "scenario_label": final_scenario_label(scenario_key),
+        "status": status,
+        "score": score,
+        "summary": payload.get("summary") or f"{final_scenario_label(scenario_key)} 결과입니다.",
+        "findings": findings,
+        "warnings": warnings,
+        "recommendations": recommendations,
+    }
+
+
+def build_missing_scenario_result(scenario_key: str) -> Dict[str, Any]:
+    """실행 대상이지만 저장 결과가 없는 시나리오를 최종 보고서에 표시합니다."""
+    return {
+        "scenario_key": canonical_scenario_key(scenario_key),
+        "scenario_label": final_scenario_label(scenario_key),
+        "status": "보완 필요",
+        "score": 0,
+        "summary": "저장된 서브에이전트 결과가 없어 최종 보고서에서 누락 위험으로 표시했습니다.",
+        "findings": ["서브에이전트 결과 JSON이 생성되지 않았습니다."],
+        "warnings": [],
+        "recommendations": ["해당 시나리오 점검을 다시 실행하고 결과 JSON 저장 여부를 확인하세요."],
+    }
+
+
+def infer_final_status(score: int, findings: List[Any]) -> str:
+    """최종 보고서용 상태를 점수와 findings 기준으로 산정합니다."""
+    if score >= 85 and not findings:
+        return "통과"
+    if score >= 70 and not findings:
+        return "검토 권장"
+    return "보완 필요"
+
+
+def final_scenario_label(scenario_key: str) -> str:
+    """최종 보고서 표시용 시나리오 라벨을 반환합니다."""
+    labels = {
+        "basic_quality": "기초 품질 점검",
+        "traceability": "요구사항-기능-UI 구조 정합성",
+        "ui_match": "기능-UI 내용 일치성",
+        "coverage": "요구사항 기반 기능 완전성",
+    }
+    return labels.get(canonical_scenario_key(scenario_key), str(scenario_key))
+
+
+def build_final_report_summary(scenario_results: List[Dict[str, Any]], overall_score: int) -> str:
+    """최종 보고서 요약을 생성합니다."""
+    blocked = [
+        str(result.get("scenario_label") or result.get("scenario_key"))
+        for result in scenario_results
+        if result.get("status") == "보완 필요"
+    ]
+    if blocked:
+        return (
+            "저장된 서브에이전트 결과를 기준으로 최종 품질 점검을 종합했습니다. "
+            f"전체 점수는 {overall_score}점이며, 보완 필요 시나리오는 {', '.join(blocked)}입니다."
+        )
+    return (
+        "저장된 서브에이전트 결과를 기준으로 최종 품질 점검을 종합했습니다. "
+        f"전체 점수는 {overall_score}점이며, 모든 시나리오가 통과 또는 검토 권장 수준입니다."
+    )
+
+
+def build_final_verdict_cards(
+    scenario_results: List[Dict[str, Any]],
+    overall_score: int,
+    blocked_scenarios: List[str],
+) -> List[Dict[str, str]]:
+    """Build top-level verdict cards for the summary tab."""
+    if overall_score >= 85:
+        verdict = "양호"
+        detail = "전체 품질이 기준 이상입니다."
+    elif overall_score >= 70:
+        verdict = "검토 필요"
+        detail = "일부 시나리오에서 보완 검토가 필요합니다."
+    else:
+        verdict = "보완 필요"
+        detail = "핵심 산출물 간 품질 문제가 누적되어 있습니다."
+
+    lowest = min(
+        scenario_results,
+        key=lambda result: result.get("score", 101) if isinstance(result.get("score"), int) else 101,
+        default={},
+    )
+    return [
+        {"label": "전체 판정", "value": verdict, "detail": detail},
+        {"label": "전체 점수", "value": f"{overall_score}점", "detail": "100점 만점 기준"},
+        {"label": "보완 필요", "value": f"{len(blocked_scenarios)}개", "detail": "기준 미달 시나리오 수"},
+        {
+            "label": "최저 점수",
+            "value": f"{lowest.get('score', 0)}점",
+            "detail": str(lowest.get("scenario_label") or "점검 결과 없음"),
+        },
+    ]
+
+
+def build_final_top_risks(scenario_results: List[Dict[str, Any]]) -> List[str]:
+    """Build the top 3 concrete risks across subagents."""
+    candidates: List[Dict[str, Any]] = []
+    for result in scenario_results:
+        scenario_key = str(result.get("scenario_key") or "")
+        scenario_label = str(result.get("scenario_label") or final_scenario_label(scenario_key))
+        score = result.get("score", 0)
+        score = score if isinstance(score, int) else 0
+        for index, finding in enumerate(result.get("findings") or []):
+            add_summary_item_candidate(candidates, scenario_key, scenario_label, score, "오류", finding, index)
+        for index, warning in enumerate(result.get("warnings") or []):
+            add_summary_item_candidate(candidates, scenario_key, scenario_label, score, "경고", warning, index)
+
+    return select_ranked_summary_items(candidates, 3)
+
+
+def build_final_traceability_overview(run_id: str) -> Dict[str, Any]:
+    """Build traceability summary values from the connection report."""
+    file_path = traceability_connection_report_path(run_id)
+    payload = load_json_dict(file_path) if file_path.exists() else {}
+    summary = payload.get("summary", {}) if isinstance(payload, dict) else {}
+    orphan_references = payload.get("orphan_references", {}) if isinstance(payload, dict) else {}
+    orphan_count = 0
+    if isinstance(orphan_references, dict):
+        orphan_count = sum(len(value) for value in orphan_references.values() if isinstance(value, list))
+
+    return {
+        "requirement_to_feature_coverage_rate": summary.get("requirement_to_feature_coverage_rate", 0) if isinstance(summary, dict) else 0,
+        "feature_to_ui_coverage_rate": summary.get("feature_to_ui_coverage_rate", 0) if isinstance(summary, dict) else 0,
+        "missing_requirement_to_feature_count": summary.get("missing_requirement_to_feature_count", 0) if isinstance(summary, dict) else 0,
+        "missing_feature_to_ui_count": summary.get("missing_feature_to_ui_count", 0) if isinstance(summary, dict) else 0,
+        "traceability_changes_count": len(payload.get("traceability_changes", [])) if isinstance(payload, dict) else 0,
+        "orphan_reference_count": orphan_count,
+        "artifact_path": str(file_path),
+    }
+
+
+def build_final_document_fix_points(scenario_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Group concrete findings by artifact document."""
+    document_labels = ["요구사항 정의서", "기능 정의서", "UI 설계서"]
+    grouped: Dict[str, List[str]] = {label: [] for label in document_labels}
+    for result in scenario_results:
+        scenario_label = str(result.get("scenario_label") or final_scenario_label(result.get("scenario_key", "")))
+        for item in [*(result.get("findings") or []), *(result.get("warnings") or [])]:
+            text = str(item).strip()
+            if should_skip_priority_action(text):
+                continue
+            for document_label in document_labels:
+                if document_label in text and len(grouped[document_label]) < 3:
+                    grouped[document_label].append(f"[{scenario_label}] {text}")
+
+    return [
+        {"document_label": document_label, "points": points}
+        for document_label, points in grouped.items()
+        if points
+    ]
+
+
+def build_final_business_impact_features(scenario_results: List[Dict[str, Any]]) -> List[str]:
+    """Extract feature or requirement issues likely to affect user-facing behavior."""
+    impact_keywords = [
+        "기능-UI 행위 불일치",
+        "기능 범위 밖 UI 행위",
+        "기능 정의 보완 필요",
+        "UI 설계 보완 필요",
+        "요구사항 대비 기능 정의가 누락",
+        "요구사항 대비 UI 설계가 누락",
+    ]
+    candidates: List[Dict[str, Any]] = []
+    for result in scenario_results:
+        scenario_key = str(result.get("scenario_key") or "")
+        scenario_label = str(result.get("scenario_label") or final_scenario_label(scenario_key))
+        score = result.get("score", 0)
+        score = score if isinstance(score, int) else 0
+        for index, item in enumerate([*(result.get("findings") or []), *(result.get("warnings") or [])]):
+            text = str(item).strip()
+            if not any(keyword in text for keyword in impact_keywords):
+                continue
+            add_summary_item_candidate(candidates, scenario_key, scenario_label, score, "영향", text, index)
+
+    return select_ranked_summary_items(candidates, 5)
+
+
+def add_summary_item_candidate(
+    candidates: List[Dict[str, Any]],
+    scenario_key: str,
+    scenario_label: str,
+    score: int,
+    item_type: str,
+    raw_text: Any,
+    item_index: int,
+) -> None:
+    """Add one summary-section item candidate."""
+    text = str(raw_text).strip()
+    if should_skip_priority_action(text):
+        return
+    type_rank = {"오류": 0, "경고": 1, "영향": 2, "개선": 3}.get(item_type, 4)
+    candidates.append({
+        "text": f"[{scenario_label} {item_type}] {text}",
+        "rank": (
+            priority_specificity_rank(text),
+            type_rank,
+            score,
+            {
+                "basic_quality": 0,
+                "traceability": 1,
+                "ui_match": 2,
+                "coverage": 3,
+            }.get(canonical_scenario_key(scenario_key), 9),
+            item_index,
+        ),
+    })
+
+
+def select_ranked_summary_items(candidates: List[Dict[str, Any]], limit: int) -> List[str]:
+    """Sort and de-duplicate summary candidates."""
+    candidates.sort(key=lambda item: item["rank"])
+    selected: List[str] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        text = str(candidate.get("text") or "")
+        key = normalize_priority_action_key(text)
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        selected.append(text)
+        if len(selected) >= limit:
+            break
+    return selected
+
+
+def build_final_priority_actions(scenario_results: List[Dict[str, Any]]) -> List[str]:
+    """Build concrete top-priority actions from subagent findings, warnings, and recommendations."""
+    candidates: List[Dict[str, Any]] = []
+    for result in scenario_results:
+        scenario_key = str(result.get("scenario_key") or "")
+        scenario_label = str(result.get("scenario_label") or final_scenario_label(scenario_key))
+        score = result.get("score", 0)
+        score = score if isinstance(score, int) else 0
+
+        for index, finding in enumerate(result.get("findings") or []):
+            add_priority_candidate(candidates, scenario_key, scenario_label, score, "오류", finding, index)
+
+        for index, warning in enumerate(result.get("warnings") or []):
+            add_priority_candidate(candidates, scenario_key, scenario_label, score, "경고", warning, index)
+
+        for index, recommendation in enumerate(result.get("recommendations") or []):
+            add_priority_candidate(candidates, scenario_key, scenario_label, score, "개선", recommendation, index)
+
+    candidates.sort(key=lambda item: item["rank"])
+    actions: List[str] = []
+    seen_keys: set[str] = set()
+    for candidate in candidates:
+        text = candidate["action"]
+        dedupe_key = normalize_priority_action_key(text)
+        if not text or dedupe_key in seen_keys:
+            continue
+        seen_keys.add(dedupe_key)
+        actions.append(text)
+        if len(actions) >= 5:
+            break
+    return actions
+
+
+def add_priority_candidate(
+    candidates: List[Dict[str, Any]],
+    scenario_key: str,
+    scenario_label: str,
+    score: int,
+    item_type: str,
+    raw_text: Any,
+    item_index: int,
+) -> None:
+    """Add one concrete priority-action candidate if the text is useful enough."""
+    text = str(raw_text).strip()
+    if should_skip_priority_action(text):
+        return
+
+    action = format_priority_action(scenario_label, item_type, text)
+    type_rank = {"오류": 0, "경고": 1, "개선": 2}.get(item_type, 3)
+    scenario_rank = {
+        "basic_quality": 0,
+        "traceability": 1,
+        "ui_match": 2,
+        "coverage": 3,
+    }.get(canonical_scenario_key(scenario_key), 9)
+    candidates.append({
+        "action": action,
+        "rank": (
+            priority_specificity_rank(text),
+            type_rank,
+            scenario_rank,
+            score,
+            item_index,
+        ),
+    })
+
+
+def should_skip_priority_action(text: str) -> bool:
+    """Filter broad or non-actionable priority-action candidates."""
+    if not text:
+        return True
+    normalized = normalize(text)
+    skip_fragments = [
+        "개선 필요 사항이 없습니다",
+        "정기 점검",
+        "재검사",
+        "재수행",
+        "위 항목",
+        "수정 후 sc-",
+    ]
+    return any(fragment in normalized for fragment in skip_fragments)
+
+
+def priority_specificity_rank(text: str) -> int:
+    """Prefer row/ID-specific findings over broad recommendations."""
+    if re.search(r"\d+\s*행", text):
+        return 0
+    if re.search(r"\b(REQ|RQ|UI|U|F)-?[A-Z0-9_]*\d+", text, re.IGNORECASE):
+        return 1
+    if "예:" in text or "/" in text:
+        return 2
+    return 3
+
+
+def format_priority_action(scenario_label: str, item_type: str, text: str) -> str:
+    """Format a subagent issue as a concrete priority action."""
+    if item_type == "개선":
+        return f"[{scenario_label} 개선] {text}"
+    return f"[{scenario_label} {item_type}] {text}"
+
+
+def normalize_priority_action_key(text: str) -> str:
+    """Build a stable key for removing duplicated priority actions."""
+    normalized = normalize(text)
+    normalized = re.sub(r"^\[[^\]]+\]\s*", "", normalized)
+    return normalized[:160]
+
+
 def run_self_quality_review(run_id: str, scenario_key: str, threshold: int = 85) -> Dict[str, Any]:
-    """문서별 보완본을 다시 점검해 교정 품질과 재실행 필요 여부를 판단합니다."""
+    """문서별 보완본을 점검해 교정 품질과 보완 권고 필요 여부를 판단합니다."""
     scenario = canonical_scenario_key(scenario_key)
     if scenario == "coverage":
         return {
@@ -1927,6 +2572,75 @@ def run_self_quality_review(run_id: str, scenario_key: str, threshold: int = 85)
             "checked_document_paths": [],
             "document_scores": {},
             "skipped": True,
+        }
+    if scenario == "traceability":
+        subagent_result = load_subagent_result(run_id, scenario)
+        file_path = traceability_connection_report_path(run_id)
+        connection_report = load_json_dict(file_path) if file_path.exists() else {}
+        findings: List[str] = []
+        warnings: List[str] = []
+        guidance: List[str] = []
+        score = 100
+
+        required_keys = {
+            "summary",
+            "requirement_to_feature",
+            "feature_to_ui",
+            "orphan_references",
+            "traceability_changes",
+        }
+        missing_keys = sorted(key for key in required_keys if key not in connection_report)
+        if not connection_report:
+            findings.append("traceability 연결 리포트 JSON이 생성되지 않았습니다.")
+            guidance.append("traceability_agent_connection_map.json을 생성하고 요구사항->기능->UI 연결 정보를 저장하세요.")
+            score = 0
+        elif missing_keys:
+            findings.append(f"traceability 연결 리포트에 필수 필드가 없습니다: {', '.join(missing_keys)}")
+            guidance.append("연결 리포트에 summary, requirement_to_feature, feature_to_ui, orphan_references, traceability_changes를 포함하세요.")
+            score -= 35
+
+        summary = connection_report.get("summary", {}) if isinstance(connection_report, dict) else {}
+        if isinstance(summary, dict):
+            req_coverage = float(summary.get("requirement_to_feature_coverage_rate") or 0)
+            ui_coverage = float(summary.get("feature_to_ui_coverage_rate") or 0)
+            if req_coverage < 100:
+                warnings.append(f"요구사항->기능 연결률이 {req_coverage}%입니다.")
+                guidance.append("기능 정의서에 연결되지 않은 요구사항 ID를 우선 보완하세요.")
+                score -= 10
+            if ui_coverage < 100:
+                warnings.append(f"기능->UI 연결률이 {ui_coverage}%입니다.")
+                guidance.append("UI 설계서에 연결되지 않은 기능/화면ID를 검토하세요.")
+                score -= 10
+
+        orphan_references = connection_report.get("orphan_references", {}) if isinstance(connection_report, dict) else {}
+        orphan_count = 0
+        if isinstance(orphan_references, dict):
+            orphan_count = sum(len(value) for value in orphan_references.values() if isinstance(value, list))
+        if orphan_count:
+            warnings.append(f"정의되지 않은 ID 또는 고아 ID 후보가 {orphan_count}건 있습니다.")
+            guidance.append("정의되지 않은 ID 참조를 요구사항/기능/UI 원천 문서 기준으로 정리하세요.")
+            score -= min(20, orphan_count * 2)
+
+        score = max(0, min(100, score))
+        rerun_required = score < threshold
+        target_agent_name = scenario_to_agent_name(scenario)
+        return {
+            "scenario_key": scenario,
+            "target_agent_name": target_agent_name,
+            "summary": (
+                f"{target_agent_name} 연결 리포트를 점검했습니다. "
+                f"교정 품질 점수는 {score}점이며 기준 점수 {threshold}점 "
+                f"{'미만으로 보완 권고가 필요합니다.' if rerun_required else '이상으로 통과했습니다'}."
+            ),
+            "score": score,
+            "threshold": threshold,
+            "rerun_required": rerun_required,
+            "findings": limit_items(findings, 8),
+            "warnings": limit_items(warnings, 8),
+            "correction_guidance": limit_items(guidance, 8),
+            "checked_document_paths": [str(file_path)] if file_path.exists() else [],
+            "document_scores": {"traceability_connection_report": score},
+            "source_result_summary": summarize_subagent_result(subagent_result),
         }
     subagent_result = load_subagent_result(run_id, scenario)
     corrected_docs_by_key = load_corrected_document_payloads(run_id, scenario)
@@ -1990,12 +2704,12 @@ def run_self_quality_review(run_id: str, scenario_key: str, threshold: int = 85)
     rerun_required = score < threshold
     target_agent_name = scenario_to_agent_name(scenario)
     if rerun_required and not guidance:
-        guidance.append(f"{target_agent_name}를 재실행해 문서별 보완본의 잔여 오류를 줄이고 corrected_document_paths를 다시 생성하세요.")
+        guidance.append(f"{target_agent_name} 문서별 보완본의 잔여 오류를 줄일 수 있도록 관련 문서 행과 컬럼을 보완하세요.")
 
     summary = (
         f"{target_agent_name} 문서별 보완본 3종을 자가 점검했습니다. "
         f"교정 품질 점수는 {score}점이며 기준점수 {threshold}점 "
-        f"{'미만으로 재실행이 필요합니다' if rerun_required else '이상으로 통과했습니다'}."
+        f"{'미만으로 보완 권고가 필요합니다' if rerun_required else '이상으로 통과했습니다'}."
     )
     return {
         "scenario_key": scenario,
@@ -2024,7 +2738,7 @@ def score_corrected_document(
     document_label = DOCUMENT_LABELS.get(document_key, document_key)
     if payload.get("load_error"):
         findings.append(f"{document_label} 보완본 JSON을 읽을 수 없습니다: {payload.get('load_error')}")
-        guidance.append(f"{document_label} 보완본을 UTF-8 JSON으로 다시 생성하세요.")
+        guidance.append(f"{document_label} 보완본이 UTF-8 JSON 형식을 유지하도록 저장 상태를 보완하세요.")
         return 0
 
     parser_status = payload.get("parser_status")
@@ -2103,10 +2817,10 @@ def compact_review_result(result: Dict[str, Any], limit: int = 8) -> Dict[str, A
 
 
 def build_guidance_from_messages(scenario_key: str, messages: List[str]) -> List[str]:
-    """잔여 오류 메시지를 원 SubAgent 재실행 지침으로 변환합니다."""
+    """잔여 오류 메시지를 최종 보고서용 보완 지침으로 변환합니다."""
     target_agent_name = scenario_to_agent_name(scenario_key)
     return [
-        f"{target_agent_name} 재실행 지침: {message} 이 항목이 보완본에 남지 않도록 관련 문서/행/컬럼을 수정하고 문서별 output JSON 3개를 다시 생성하세요."
+        f"{target_agent_name} 보완 지침: {message} 이 항목이 보완본에 남지 않도록 관련 문서/행/컬럼을 수정하세요."
         for message in messages[:10]
     ]
 

@@ -5,6 +5,7 @@ import json
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 
@@ -15,6 +16,7 @@ from ui.service_data import (
     get_result_view_label,
     get_scenario_order,
 )
+from ui.side_filter import render_sidebar
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SUBAGENT_DATA_ROOT = PROJECT_ROOT / "data" / "subagents"
@@ -25,6 +27,16 @@ DEFAULT_AGENT_STREAM_STATE = {
     "progress": 0.0,
     "logs": [],
 }
+CORRECTION_RESULT_TABS = [
+    ("basic_quality", "기초 품질 점검 교정 결과", "basic_quality_agent"),
+    ("traceability", "문서 연결성 점검 교정 결과", "traceability_agent"),
+    ("ui_match", "기능-화면일치점검 교정 결과", "ui_match_agent"),
+]
+CORRECTION_DOCUMENTS = [
+    ("requirement_definition", "요구사항 정의서"),
+    ("feature_definition", "기능 정의서"),
+    ("ui_design", "UI 설계서"),
+]
 
 
 def load_json_dict(file_path: Path) -> dict:
@@ -39,6 +51,158 @@ def load_json_dict(file_path: Path) -> dict:
         return {}
 
     return payload if isinstance(payload, dict) else {}
+
+
+def get_result_run_id(results: dict) -> str:
+    """Return the run_id associated with the displayed result."""
+    if isinstance(results, dict):
+        run_id = results.get("run_id")
+        if run_id:
+            return str(run_id)
+
+        final_report = results.get("final_report")
+        if isinstance(final_report, dict) and final_report.get("run_id"):
+            return str(final_report["run_id"])
+
+    last_run = st.session_state.get("last_run", {})
+    if isinstance(last_run, dict) and last_run.get("run_id"):
+        return str(last_run["run_id"])
+
+    return ""
+
+
+def corrected_document_path(run_id: str, scenario_key: str, output_prefix: str, document_key: str) -> Path:
+    """Build the saved corrected document JSON path."""
+    return SUBAGENT_DATA_ROOT / run_id / scenario_key / f"{output_prefix}_output_{document_key}.json"
+
+
+def traceability_connection_report_path(run_id: str) -> Path:
+    """Build the saved traceability connection-map JSON path."""
+    return SUBAGENT_DATA_ROOT / run_id / "traceability" / "traceability_agent_connection_map.json"
+
+
+def corrected_payload_to_dataframe(payload: dict) -> pd.DataFrame:
+    """Convert a corrected document JSON payload into a dataframe for display."""
+    rows: list[dict] = []
+    sheets = payload.get("sheets", []) if isinstance(payload, dict) else []
+    if not isinstance(sheets, list):
+        return pd.DataFrame()
+
+    for sheet in sheets:
+        if not isinstance(sheet, dict):
+            continue
+
+        sheet_name = str(sheet.get("sheet_name") or "")
+        data_rows = sheet.get("data", [])
+        if not isinstance(data_rows, list):
+            continue
+
+        for index, row in enumerate(data_rows, start=1):
+            if not isinstance(row, dict):
+                continue
+
+            normalized_row = {
+                "sheet_name": sheet_name,
+                "row_no": index,
+            }
+            normalized_row.update(
+                {
+                    str(key): json.dumps(value, ensure_ascii=False) if isinstance(value, (dict, list)) else value
+                    for key, value in row.items()
+                }
+            )
+            rows.append(normalized_row)
+
+    return pd.DataFrame(rows)
+
+
+def get_applied_changes(payload: dict, document_key: str) -> list[dict]:
+    """Extract applied correction metadata for one document."""
+    metadata = payload.get("correction_metadata", {}) if isinstance(payload, dict) else {}
+    applied_changes = metadata.get("applied_changes", []) if isinstance(metadata, dict) else []
+    if not isinstance(applied_changes, list):
+        return []
+
+    return [
+        change
+        for change in applied_changes
+        if isinstance(change, dict) and str(change.get("document_key") or "") == document_key
+    ]
+
+
+def applied_changes_to_dataframe(applied_changes: list[dict]) -> pd.DataFrame:
+    """Convert applied correction metadata into a compact dataframe."""
+    rows: list[dict] = []
+    for change in applied_changes:
+        rows.append(
+            {
+                "row_index": change.get("row_index"),
+                "display_row_no": excel_row_to_display_row(change.get("row_index")),
+                "column": change.get("column"),
+                "before": stringify_cell_value(change.get("before")),
+                "after": stringify_cell_value(change.get("after")),
+                "reason": change.get("reason"),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def excel_row_to_display_row(row_index: object) -> int | None:
+    """Map original Excel row numbers to the dataframe row_no used by parsed sheets."""
+    if not isinstance(row_index, int):
+        return None
+    return max(row_index - 3, 1)
+
+
+def stringify_cell_value(value: object) -> object:
+    """Return readable cell values for dataframe display."""
+    if isinstance(value, (dict, list)):
+        return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def build_changed_cell_map(applied_changes: list[dict]) -> tuple[dict[int, set[str]], set[int]]:
+    """Build row/column lookup data for styling corrected cells."""
+    changed_cells: dict[int, set[str]] = {}
+    changed_rows: set[int] = set()
+
+    for change in applied_changes:
+        display_row_no = excel_row_to_display_row(change.get("row_index"))
+        if display_row_no is None:
+            continue
+
+        column = str(change.get("column") or "")
+        if column == "*":
+            changed_rows.add(display_row_no)
+            continue
+
+        changed_cells.setdefault(display_row_no, set()).add(column)
+
+    return changed_cells, changed_rows
+
+
+def style_corrected_cells(dataframe: pd.DataFrame, applied_changes: list[dict]):
+    """Color corrected cells in red based on applied_changes metadata."""
+    changed_cells, changed_rows = build_changed_cell_map(applied_changes)
+
+    def style_row(row: pd.Series) -> list[str]:
+        row_no = row.get("row_no")
+        if not isinstance(row_no, int):
+            return ["" for _ in row.index]
+
+        row_changed_columns = changed_cells.get(row_no, set())
+        whole_row_changed = row_no in changed_rows
+        styles: list[str] = []
+        for column_name in row.index:
+            if column_name in {"sheet_name", "row_no"}:
+                styles.append("")
+            elif whole_row_changed or str(column_name) in row_changed_columns:
+                styles.append("color: #d32f2f; font-weight: 700;")
+            else:
+                styles.append("")
+        return styles
+
+    return dataframe.style.apply(style_row, axis=1)
 
 
 def load_current_results() -> dict:
@@ -247,6 +411,7 @@ def render_main_view() -> None:
     scenario_order = get_scenario_order()  # 통합 실행 시나리오 순서 [basic_quality, traceability, ui_match, coverage]
     results = load_current_results()  # 현재 세션의 최신 통합 점검 결과
 
+    render_sidebar(scenario_order)
     render_header(results, scenario_order)  # 상단 제목과 요약 지표 렌더링
     render_execute_section(scenario_order)  # 통합 점검 실행 영역 렌더링
 
@@ -297,7 +462,7 @@ def render_header(results: dict, scenario_order: list[str]) -> None:
 def render_execute_section(scenario_order: list[str]) -> None:
     """파일 업로드와 통합 점검 실행 영역을 그립니다."""
     st.divider()
-    st.subheader("통합 점검 실행")
+    st.subheader("통합 점검 실행", divider="gray")
     render_completion_dialog()
 
     left, right = st.columns([1.35, 1.0])
@@ -424,7 +589,11 @@ def run_integrated_check(
             return
 
         progress = clamp_stream_progress(event.get("progress"))
-        if progress < 1.0 or message != "Main Agent가 최종 보고서를 정리했습니다.":
+        report_done_messages = {
+            "최종 보고서 작성이 완료되었습니다.",
+            "Main Agent가 최종 보고서를 정리했습니다.",
+        }
+        if progress < 1.0 or message not in report_done_messages:
             return
 
         result_loading_started = True
@@ -435,9 +604,9 @@ def run_integrated_check(
         message = str(event.get("message") or "Agent가 작업을 진행하고 있습니다.")
         kind = str(event.get("kind") or "status")
 
+        show_result_loading_if_ready(event, message, kind)
         if stream_callback is not None:
             stream_callback(event)
-        show_result_loading_if_ready(event, message, kind)
 
     # 백엔드 파이프라인 실행
     backend_result = run_backend_pipeline(
@@ -479,8 +648,14 @@ def render_result_section(results: dict, scenario_order: list[str]) -> None:
     st.divider()
     st.subheader("통합 점검 결과")
 
-    tab_summary, tab_scenarios = st.tabs(
-        ["통합 요약", "시나리오별 결과"]
+    tab_summary, tab_scenarios, tab_basic_quality, tab_traceability, tab_ui_match = st.tabs(
+        [
+            "통합 요약",
+            "시나리오별 결과",
+            "기초 품질 점검 교정 결과",
+            "문서 연결성 점검 교정 결과",
+            "기능-화면일치점검 교정 결과",
+        ]
     )
 
     with tab_summary:
@@ -488,6 +663,11 @@ def render_result_section(results: dict, scenario_order: list[str]) -> None:
 
     with tab_scenarios:
         render_scenario_results(results, scenario_order)
+
+    correction_tabs = [tab_basic_quality, tab_traceability, tab_ui_match]
+    for tab, (scenario_key, _label, output_prefix) in zip(correction_tabs, CORRECTION_RESULT_TABS):
+        with tab:
+            render_correction_result_tab(results, scenario_key, output_prefix)
 
 
 def render_summary_tab(results: dict, scenario_order: list[str]) -> None:
@@ -528,6 +708,8 @@ def render_summary_tab(results: dict, scenario_order: list[str]) -> None:
     st.progress(max(0.0, min(float(overall_score) / 100.0, 1.0)))
     summary_renderer(summary)
 
+    render_integrated_summary_sections(final_report)
+
     st.divider()
     st.markdown("### 우선순위 액션")
     if priority_actions:
@@ -535,6 +717,99 @@ def render_summary_tab(results: dict, scenario_order: list[str]) -> None:
             st.write(f"{index}. {action}")
     else:
         st.info("우선 조치가 필요한 항목이 없습니다.")
+
+
+def render_integrated_summary_sections(final_report: dict) -> None:
+    """Render additional integrated summary sections generated from subagent outputs."""
+    st.divider()
+    render_verdict_cards(final_report.get("verdict_cards", []))
+
+    summary_cols = st.columns([1.0, 1.0])
+    with summary_cols[0]:
+        render_summary_item_list("핵심 리스크 TOP 3", final_report.get("top_risks", []), empty_text="핵심 리스크가 없습니다.")
+    with summary_cols[1]:
+        render_traceability_overview(final_report.get("traceability_overview", {}))
+
+    st.divider()
+    render_document_fix_points(final_report.get("document_fix_points", []))
+
+    st.divider()
+    render_summary_item_list(
+        "업무 영향 기능",
+        final_report.get("business_impact_features", []),
+        empty_text="업무 영향 기능으로 분류된 항목이 없습니다.",
+    )
+
+
+def render_verdict_cards(cards: object) -> None:
+    """Render top verdict cards."""
+    st.markdown("### 전체 판정 카드")
+    if not isinstance(cards, list) or not cards:
+        st.info("전체 판정 카드 데이터가 없습니다.")
+        return
+
+    columns = st.columns(min(len(cards), 4))
+    for column, card in zip(columns, cards[:4]):
+        if not isinstance(card, dict):
+            continue
+        with column:
+            st.metric(
+                str(card.get("label") or ""),
+                str(card.get("value") or ""),
+                str(card.get("detail") or ""),
+                border=True,
+            )
+
+
+def render_summary_item_list(title: str, items: object, empty_text: str) -> None:
+    """Render a compact ordered list for a summary section."""
+    st.markdown(f"### {title}")
+    if not isinstance(items, list) or not items:
+        st.info(empty_text)
+        return
+
+    for index, item in enumerate(items, start=1):
+        st.write(f"{index}. {item}")
+
+
+def render_traceability_overview(overview: object) -> None:
+    """Render requirement-feature-UI connection overview."""
+    st.markdown("### 연결성 현황")
+    if not isinstance(overview, dict) or not overview:
+        st.info("연결성 현황 데이터가 없습니다.")
+        return
+
+    metric_cols = st.columns(2)
+    with metric_cols[0]:
+        st.metric("요구사항 -> 기능", f"{overview.get('requirement_to_feature_coverage_rate', 0)}%", border=True)
+        st.metric("연결 보완", f"{overview.get('traceability_changes_count', 0)}건", border=True)
+    with metric_cols[1]:
+        st.metric("기능 -> UI", f"{overview.get('feature_to_ui_coverage_rate', 0)}%", border=True)
+        st.metric("정의되지 않은 ID", f"{overview.get('orphan_reference_count', 0)}건", border=True)
+
+
+def render_document_fix_points(document_fix_points: object) -> None:
+    """Render grouped document-level fix points."""
+    st.markdown("### 문서별 수정 포인트")
+    if not isinstance(document_fix_points, list) or not document_fix_points:
+        st.info("문서별 수정 포인트가 없습니다.")
+        return
+
+    tabs = st.tabs([
+        str(item.get("document_label") or "문서")
+        for item in document_fix_points
+        if isinstance(item, dict)
+    ])
+    for tab, item in zip(tabs, document_fix_points):
+        if not isinstance(item, dict):
+            continue
+        points = item.get("points", [])
+        with tab:
+            if isinstance(points, list) and points:
+                for index, point in enumerate(points, start=1):
+                    st.write(f"{index}. {point}")
+            else:
+                st.info("수정 포인트가 없습니다.")
 
 
 def render_scenario_results(results: dict, scenario_order: list[str]) -> None:
@@ -646,6 +921,301 @@ def render_scenario_results(results: dict, scenario_order: list[str]) -> None:
                         st.write(f"- {recommendation}")
                 else:
                     st.info("개선 권고가 없습니다.")
+
+
+def render_correction_result_tab(results: dict, scenario_key: str, output_prefix: str) -> None:
+    """Render corrected document outputs for one scenario."""
+    run_id = get_result_run_id(results)
+    if not run_id:
+        st.info("교정 결과를 조회할 실행 ID가 없습니다.")
+        return
+
+    if scenario_key == "traceability":
+        render_traceability_connection_result(run_id)
+        return
+
+    document_tabs = st.tabs([label for _document_key, label in CORRECTION_DOCUMENTS])
+    for document_tab, (document_key, document_label) in zip(document_tabs, CORRECTION_DOCUMENTS):
+        with document_tab:
+            render_corrected_document_dataframe(
+                run_id=run_id,
+                scenario_key=scenario_key,
+                output_prefix=output_prefix,
+                document_key=document_key,
+                document_label=document_label,
+            )
+
+
+def render_traceability_connection_result(run_id: str) -> None:
+    """Render traceability-specific connection status instead of generic cell corrections."""
+    file_path = traceability_connection_report_path(run_id)
+    payload = load_json_dict(file_path)
+    if not payload:
+        st.info("문서 연결성 점검 전용 연결 리포트가 아직 없습니다. 통합 점검을 다시 실행하면 생성됩니다.")
+        st.caption(str(file_path))
+        return
+
+    summary = payload.get("summary", {}) if isinstance(payload, dict) else {}
+    if not isinstance(summary, dict):
+        summary = {}
+
+    st.markdown("### 문서 연결성 점검 교정 결과")
+    st.caption("요구사항 정의서, 기능 정의서, UI 설계서의 ID가 요구사항 -> 기능 -> UI 순서로 이어지는지 확인합니다.")
+
+    metric_cols = st.columns(4)
+    with metric_cols[0]:
+        st.metric("요구사항 -> 기능", f"{summary.get('requirement_to_feature_coverage_rate', 0)}%", border=True)
+    with metric_cols[1]:
+        st.metric("기능 누락", f"{summary.get('missing_requirement_to_feature_count', 0)}건", border=True)
+    with metric_cols[2]:
+        st.metric("기능 -> UI", f"{summary.get('feature_to_ui_coverage_rate', 0)}%", border=True)
+    with metric_cols[3]:
+        st.metric("UI 누락", f"{summary.get('missing_feature_to_ui_count', 0)}건", border=True)
+
+    connection_tabs = st.tabs(["요구사항 -> 기능", "기능 -> UI", "정의되지 않은 ID", "연결 보완 내역"])
+
+    with connection_tabs[0]:
+        render_requirement_feature_links(payload)
+
+    with connection_tabs[1]:
+        render_feature_ui_links(payload)
+
+    with connection_tabs[2]:
+        render_orphan_traceability_references(payload)
+
+    with connection_tabs[3]:
+        render_traceability_changes(payload)
+
+    st.caption(str(file_path))
+
+
+def render_requirement_feature_links(payload: dict) -> None:
+    """Render requirement-to-feature link coverage."""
+    dataframe = requirement_feature_links_to_dataframe(payload.get("requirement_to_feature", []))
+    if dataframe.empty:
+        st.info("요구사항 -> 기능 연결 데이터를 찾을 수 없습니다.")
+        return
+
+    missing_count = int((dataframe["연결 상태"] == "기능 누락").sum()) if "연결 상태" in dataframe else 0
+    if missing_count:
+        st.warning(f"기능 정의서로 연결되지 않은 요구사항이 {missing_count}건 있습니다.")
+    else:
+        st.success("모든 요구사항이 기능 정의서와 연결되어 있습니다.")
+
+    st.dataframe(style_traceability_status(dataframe), width="stretch", height=420, hide_index=True)
+
+
+def render_feature_ui_links(payload: dict) -> None:
+    """Render feature-to-UI link coverage."""
+    dataframe = feature_ui_links_to_dataframe(payload.get("feature_to_ui", []))
+    if dataframe.empty:
+        st.info("기능 -> UI 연결 데이터를 찾을 수 없습니다.")
+        return
+
+    missing_count = int((dataframe["연결 상태"] == "UI 누락").sum()) if "연결 상태" in dataframe else 0
+    if missing_count:
+        st.warning(f"UI 설계서로 연결되지 않은 기능이 {missing_count}건 있습니다.")
+    else:
+        st.success("모든 기능이 UI 설계서와 연결되어 있습니다.")
+
+    st.dataframe(style_traceability_status(dataframe), width="stretch", height=420, hide_index=True)
+
+
+def render_orphan_traceability_references(payload: dict) -> None:
+    """Render undefined or orphan ID references."""
+    orphan_references = payload.get("orphan_references", {})
+    if not isinstance(orphan_references, dict):
+        orphan_references = {}
+
+    labels = {
+        "feature_requirement_ids_not_in_requirements": "기능 정의서가 참조하지만 요구사항 정의서에 없는 요구사항 ID",
+        "ui_requirement_ids_not_in_requirements": "UI 설계서가 참조하지만 요구사항 정의서에 없는 요구사항 ID",
+        "ui_feature_ids_not_in_features": "UI 설계서가 참조하지만 기능 정의서에 없는 기능ID",
+        "ui_screen_ids_not_in_features": "UI 설계서에만 존재하는 화면ID",
+    }
+    rows: list[dict] = []
+    for key, label in labels.items():
+        values = orphan_references.get(key, [])
+        if not isinstance(values, list):
+            continue
+        for value in values:
+            rows.append({"구분": label, "ID": value})
+
+    dataframe = pd.DataFrame(rows)
+    if dataframe.empty:
+        st.success("정의되지 않은 ID 참조나 고아 ID 후보가 없습니다.")
+        return
+
+    st.warning(f"정의되지 않은 ID 참조 또는 고아 ID 후보가 {len(dataframe)}건 있습니다.")
+    st.dataframe(dataframe, width="stretch", height=300, hide_index=True)
+
+
+def render_traceability_changes(payload: dict) -> None:
+    """Render rows added by the traceability correction step."""
+    changes = payload.get("traceability_changes", [])
+    dataframe = traceability_changes_to_dataframe(changes)
+    if dataframe.empty:
+        st.info("문서 연결성 점검에서 자동으로 추가한 연결 보완 후보가 없습니다.")
+        return
+
+    st.success(f"연결 보완 후보 {len(dataframe)}건을 생성했습니다.")
+    st.dataframe(dataframe, width="stretch", height=360, hide_index=True)
+
+
+def requirement_feature_links_to_dataframe(records: object) -> pd.DataFrame:
+    """Convert requirement-to-feature links into user-facing columns."""
+    rows: list[dict] = []
+    if not isinstance(records, list):
+        return pd.DataFrame()
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        rows.append({
+            "연결 상태": record.get("status_label"),
+            "요구사항 ID": record.get("requirement_id"),
+            "요구사항명": record.get("requirement_name"),
+            "연결 기능 수": record.get("feature_count"),
+            "기능ID": join_display_values(record.get("feature_ids")),
+            "기능명": join_display_values(record.get("feature_names")),
+            "화면ID": join_display_values(record.get("screen_ids")),
+            "조치": record.get("action"),
+        })
+    return pd.DataFrame(rows)
+
+
+def feature_ui_links_to_dataframe(records: object) -> pd.DataFrame:
+    """Convert feature-to-UI links into user-facing columns."""
+    rows: list[dict] = []
+    if not isinstance(records, list):
+        return pd.DataFrame()
+    for record in records:
+        if not isinstance(record, dict):
+            continue
+        rows.append({
+            "연결 상태": record.get("status_label"),
+            "요구사항 ID": record.get("requirement_id"),
+            "기능ID": record.get("feature_id"),
+            "기능명": record.get("feature_name"),
+            "기능 화면ID": record.get("screen_id"),
+            "UI 매칭 수": record.get("ui_match_count"),
+            "UI 화면ID": join_display_values(record.get("ui_screen_ids")),
+            "UI 화면명": join_display_values(record.get("ui_names")),
+            "조치": record.get("action"),
+        })
+    return pd.DataFrame(rows)
+
+
+def traceability_changes_to_dataframe(changes: object) -> pd.DataFrame:
+    """Convert traceability candidate additions into readable rows."""
+    rows: list[dict] = []
+    if not isinstance(changes, list):
+        return pd.DataFrame()
+    for change in changes:
+        if not isinstance(change, dict):
+            continue
+        after = change.get("after", {})
+        rows.append({
+            "산출물": change.get("document_label"),
+            "변경 유형": change.get("change_type"),
+            "추가 행": change.get("row_index"),
+            "요구사항 ID": find_value_by_keyword(after, ["요구사항 id", "요구사항id"]),
+            "기능ID": find_value_by_keyword(after, ["기능id", "기능 id"]),
+            "화면ID": find_value_by_keyword(after, ["화면id", "화면 id"]),
+            "명칭": find_value_by_keyword(after, ["기능명", "화면명", "요구사항명"]),
+            "비고": find_value_by_keyword(after, ["비고", "note"]),
+        })
+    return pd.DataFrame(rows)
+
+
+def style_traceability_status(dataframe: pd.DataFrame):
+    """Color missing traceability rows so they stand out."""
+    def style_row(row: pd.Series) -> list[str]:
+        status = str(row.get("연결 상태") or "")
+        color = ""
+        if "누락" in status:
+            color = "color: #d32f2f; font-weight: 700;"
+        elif "보완" in status:
+            color = "color: #b45309; font-weight: 700;"
+        elif "연결됨" in status:
+            color = "color: #1b5e20; font-weight: 600;"
+        return [color if column_name == "연결 상태" else "" for column_name in row.index]
+
+    return dataframe.style.apply(style_row, axis=1)
+
+
+def join_display_values(values: object) -> str:
+    """Join list values into a compact display string."""
+    if isinstance(values, list):
+        return ", ".join(str(value) for value in values if str(value).strip())
+    return str(values or "")
+
+
+def find_value_by_keyword(row: object, keywords: list[str]) -> str:
+    """Find a value from a dict by fuzzy column-name keywords."""
+    if not isinstance(row, dict):
+        return ""
+    normalized_keywords = [normalize_display_text(keyword) for keyword in keywords]
+    for key, value in row.items():
+        normalized_key = normalize_display_text(key)
+        if any(keyword in normalized_key for keyword in normalized_keywords):
+            return stringify_cell_value(value) or ""
+    return ""
+
+
+def normalize_display_text(value: object) -> str:
+    """Normalize display text for lightweight fuzzy matching."""
+    return str(value or "").replace(" ", "").replace("_", "").lower()
+
+
+def render_corrected_document_dataframe(
+    run_id: str,
+    scenario_key: str,
+    output_prefix: str,
+    document_key: str,
+    document_label: str,
+) -> None:
+    """Load one corrected document JSON and display its rows with st.dataframe."""
+    file_path = corrected_document_path(run_id, scenario_key, output_prefix, document_key)
+    payload = load_json_dict(file_path)
+    if not payload:
+        st.info(f"{document_label} 교정 결과 파일이 없습니다.")
+        st.caption(str(file_path))
+        return
+
+    dataframe = corrected_payload_to_dataframe(payload)
+    if dataframe.empty:
+        st.info(f"{document_label} 교정 결과에 표시할 행 데이터가 없습니다.")
+        st.caption(str(file_path))
+        return
+
+    metadata = payload.get("correction_metadata", {})
+    applied_changes = get_applied_changes(payload, document_key)
+    remaining_warnings = metadata.get("remaining_warnings", []) if isinstance(metadata, dict) else []
+
+    metric_cols = st.columns(3)
+    with metric_cols[0]:
+        st.metric("행 수", f"{len(dataframe)}건", border=True)
+    with metric_cols[1]:
+        st.metric("적용 변경", f"{len(applied_changes) if isinstance(applied_changes, list) else 0}건", border=True)
+    with metric_cols[2]:
+        st.metric("잔여 경고", f"{len(remaining_warnings) if isinstance(remaining_warnings, list) else 0}건", border=True)
+
+    st.dataframe(
+        style_corrected_cells(dataframe, applied_changes),
+        width="stretch",
+        height=420,
+        hide_index=True,
+    )
+
+    if applied_changes:
+        with st.expander("교정 변경 내역", expanded=False):
+            st.dataframe(
+                applied_changes_to_dataframe(applied_changes),
+                width="stretch",
+                height=240,
+                hide_index=True,
+            )
+    st.caption(str(file_path))
 
 
 def calculate_overall_score(results: dict) -> int:
